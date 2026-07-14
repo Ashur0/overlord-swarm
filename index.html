@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05060a">
+<meta name="description" content="SWARM // OVERLORD-9 — a WebXR cyber wave-shooter. Defend a neon grid from a drone swarm, in VR or on desktop.">
+<title>SWARM // OVERLORD-9</title>
+</head>
+<body>
+<style>
+  :root{
+    --void:#05060a; --grid:#0e3a44; --cyan:#00f0ff; --magenta:#ff2d6b;
+    --violet:#b14bff; --amber:#ffd23f; --text:#d7faff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--void);color:var(--text);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    padding:24px;text-align:center;z-index:10}
+  .card{width:min(560px,92vw);border:1px solid #12414c;
+    background:linear-gradient(180deg,rgba(6,12,18,.92),rgba(4,7,12,.96));
+    box-shadow:0 0 0 1px rgba(0,240,255,.08),0 24px 80px rgba(0,0,0,.7),inset 0 0 60px rgba(0,240,255,.04);
+    padding:34px 30px 28px;border-radius:4px;backdrop-filter:blur(2px)}
+  .eyebrow{font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--magenta);
+    margin-bottom:14px}
+  h1{font-size:clamp(30px,7vw,52px);font-weight:800;line-height:.98;text-wrap:balance;
+    letter-spacing:.02em;margin-bottom:6px;
+    background:linear-gradient(90deg,var(--cyan),#8fe9ff 40%,var(--violet));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 0 18px rgba(0,240,255,.28))}
+  h1 .n{color:var(--magenta);-webkit-text-fill-color:var(--magenta);filter:drop-shadow(0 0 14px rgba(255,45,107,.5))}
+  .sub{font-size:13px;color:#8fb4bf;letter-spacing:.03em;margin-bottom:22px;line-height:1.5}
+  .rules{display:grid;gap:8px;text-align:left;font-size:12.5px;color:#a9cdd6;
+    border-top:1px dashed #163b44;border-bottom:1px dashed #163b44;padding:16px 4px;margin-bottom:22px}
+  .rules b{color:var(--cyan);font-weight:700}
+  .rules .k{display:inline-block;min-width:80px;color:var(--amber);letter-spacing:.06em}
+  .btns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  button{font:inherit;font-size:14px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--void);background:var(--cyan);border:none;padding:14px 22px;cursor:pointer;
+    border-radius:3px;transition:transform .08s ease,box-shadow .2s ease,filter .2s ease;
+    box-shadow:0 0 24px rgba(0,240,255,.4)}
+  button:hover{filter:brightness(1.12);box-shadow:0 0 34px rgba(0,240,255,.6)}
+  button:active{transform:translateY(1px) scale(.99)}
+  button:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+  button.ghost{background:transparent;color:var(--cyan);box-shadow:inset 0 0 0 1px #1b5563}
+  button.ghost:hover{box-shadow:inset 0 0 0 1px var(--cyan),0 0 24px rgba(0,240,255,.2)}
+  button[disabled]{opacity:.35;cursor:not-allowed;box-shadow:none;filter:grayscale(.5)}
+  .note{margin-top:16px;font-size:11px;letter-spacing:.05em;color:#5f818b}
+
+  /* HUD */
+  #hud{position:fixed;inset:0;z-index:5;pointer-events:none;display:none;
+    padding:18px 20px;font-size:13px;letter-spacing:.08em}
+  #hud .row{position:absolute;display:flex;align-items:center;gap:8px}
+  .tl{top:18px;left:20px;flex-direction:column;align-items:flex-start;gap:2px}
+  .tc{top:18px;left:50%;transform:translateX(-50%);flex-direction:column;align-items:center}
+  .lab{font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:#5f818b}
+  .val{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--cyan);
+    text-shadow:0 0 16px rgba(0,240,255,.5)}
+  .val.mag{color:var(--magenta);text-shadow:0 0 16px rgba(255,45,107,.5)}
+  #combo{color:var(--violet);text-shadow:0 0 14px rgba(177,75,255,.6);font-size:15px;font-weight:800;
+    opacity:0;transition:opacity .15s}
+  .hpwrap{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);width:min(340px,60vw)}
+  .hpbar{height:12px;border:1px solid #1b5563;border-radius:2px;overflow:hidden;background:rgba(0,0,0,.4)}
+  .hpfill{height:100%;width:100%;background:linear-gradient(90deg,var(--cyan),#66f7ff);
+    transition:width .18s ease,background .3s}
+  .hplab{font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:#5f818b;text-align:center;margin-top:5px}
+  #xhair{position:fixed;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%);
+    z-index:6;display:none;pointer-events:none}
+  #xhair::before,#xhair::after{content:"";position:absolute;background:var(--cyan);
+    box-shadow:0 0 8px var(--cyan);opacity:.85}
+  #xhair::before{left:50%;top:0;width:2px;height:100%;transform:translateX(-50%)}
+  #xhair::after{top:50%;left:0;height:2px;width:100%;transform:translateY(-50%)}
+  #flash{position:fixed;inset:0;z-index:7;pointer-events:none;background:var(--magenta);opacity:0;
+    mix-blend-mode:screen;transition:opacity .12s}
+  #banner{position:fixed;left:50%;top:34%;transform:translate(-50%,-50%);z-index:8;
+    font-size:clamp(28px,6vw,46px);font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--violet);text-shadow:0 0 24px rgba(177,75,255,.6);opacity:0;pointer-events:none;
+    text-align:center;white-space:nowrap}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<canvas id="gl"></canvas>
+
+<div id="xhair"></div>
+<div id="flash"></div>
+<div id="banner"></div>
+
+<div id="hud" aria-hidden="true">
+  <div class="row tl"><span class="lab">Score</span><span class="val" id="score">0</span>
+    <span id="combo">x1</span></div>
+  <div class="row tc"><span class="lab">Wave</span><span class="val mag" id="wave">1</span></div>
+  <div class="hpwrap"><div class="hpbar"><div class="hpfill" id="hpfill"></div></div>
+    <div class="hplab">Hull Integrity</div></div>
+</div>
+
+<div class="overlay" id="menu">
+  <div class="card">
+    <div class="eyebrow">Grid Defense Protocol</div>
+    <h1>SWARM<span class="n">//</span>OVERLORD&#8209;9</h1>
+    <p class="sub">OVERLORD&#8209;9 is flooding your grid with attack drones. Hold the arena.
+      Point, fire, don't let them reach you.</p>
+    <div class="rules">
+      <div><span class="k">VR</span> <b>Trigger</b> to fire &mdash; aim with either controller.</div>
+      <div><span class="k">Desktop</span> <b>Move mouse</b> to aim &mdash; <b>click</b> to fire.</div>
+      <div><span class="k">Combo</span> chain hits without missing to multiply score.</div>
+      <div><span class="k">Danger</span> every drone that reaches you burns hull. Zero = down.</div>
+    </div>
+    <div class="btns">
+      <button id="btnVR">Enter VR</button>
+      <button id="btnDesk" class="ghost">Play on Desktop</button>
+    </div>
+    <div class="note" id="vrNote">Checking headset&hellip;</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ===== SWARM // OVERLORD-9 — self-contained WebXR/WebGL wave shooter ===== */
+const canvas = document.getElementById("gl");
+const gl = canvas.getContext("webgl", {antialias:true, alpha:false});
+const reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+/* ---------- tiny mat4 (column-major) ---------- */
+const M = {
+  perspective(out,fovy,aspect,near,far){
+    const f=1/Math.tan(fovy/2), nf=1/(near-far);
+    out[0]=f/aspect;out[1]=0;out[2]=0;out[3]=0;
+    out[4]=0;out[5]=f;out[6]=0;out[7]=0;
+    out[8]=0;out[9]=0;out[10]=(far+near)*nf;out[11]=-1;
+    out[12]=0;out[13]=0;out[14]=2*far*near*nf;out[15]=0;return out;
+  },
+  lookAt(out,eye,ctr,up){
+    let zx=eye[0]-ctr[0],zy=eye[1]-ctr[1],zz=eye[2]-ctr[2];
+    let l=Math.hypot(zx,zy,zz)||1;zx/=l;zy/=l;zz/=l;
+    let xx=up[1]*zz-up[2]*zy,xy=up[2]*zx-up[0]*zz,xz=up[0]*zy-up[1]*zx;
+    l=Math.hypot(xx,xy,xz)||1;xx/=l;xy/=l;xz/=l;
+    const yx=zy*xz-zz*xy,yy=zz*xx-zx*xz,yz=zx*xy-zy*xx;
+    out[0]=xx;out[1]=yx;out[2]=zx;out[3]=0;
+    out[4]=xy;out[5]=yy;out[6]=zy;out[7]=0;
+    out[8]=xz;out[9]=yz;out[10]=zz;out[11]=0;
+    out[12]=-(xx*eye[0]+xy*eye[1]+xz*eye[2]);
+    out[13]=-(yx*eye[0]+yy*eye[1]+yz*eye[2]);
+    out[14]=-(zx*eye[0]+zy*eye[1]+zz*eye[2]);out[15]=1;return out;
+  },
+  mul(out,a,b){
+    for(let c=0;c<4;c++)for(let r=0;r<4;r++){
+      out[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];
+    }return out;
+  },
+  model(out,p,s,ry,rx){
+    const cy=Math.cos(ry),sy=Math.sin(ry),cx=Math.cos(rx),sx=Math.sin(rx);
+    out[0]=cy*s;out[1]=0;out[2]=-sy*s;out[3]=0;
+    out[4]=sy*sx*s;out[5]=cx*s;out[6]=cy*sx*s;out[7]=0;
+    out[8]=sy*cx*s;out[9]=-sx*s;out[10]=cy*cx*s;out[11]=0;
+    out[12]=p[0];out[13]=p[1];out[14]=p[2];out[15]=1;return out;
+  },
+  fromDir(out,p,dir,sxy,sz){
+    let fx=dir[0],fy=dir[1],fz=dir[2];let l=Math.hypot(fx,fy,fz)||1;fx/=l;fy/=l;fz/=l;
+    let rx=fz,ry=0,rz=-fx;l=Math.hypot(rx,ry,rz);if(l<1e-4){rx=1;ry=0;rz=0;l=1;}rx/=l;ry/=l;rz/=l;
+    const ux=fy*rz-fz*ry,uy=fz*rx-fx*rz,uz=fx*ry-fy*rx;
+    out[0]=rx*sxy;out[1]=ry*sxy;out[2]=rz*sxy;out[3]=0;
+    out[4]=ux*sxy;out[5]=uy*sxy;out[6]=uz*sxy;out[7]=0;
+    out[8]=fx*sz;out[9]=fy*sz;out[10]=fz*sz;out[11]=0;
+    out[12]=p[0];out[13]=p[1];out[14]=p[2];out[15]=1;return out;
+  }
+};
+
+/* ---------- shader ---------- */
+const VS=`attribute vec3 aPos;attribute vec3 aNor;attribute vec2 aUV;
+uniform mat4 uProj,uView,uModel;varying vec3 vN,vW;varying vec2 vUV;
+void main(){vec4 w=uModel*vec4(aPos,1.0);vW=w.xyz;
+vN=mat3(uModel)*aNor;vUV=aUV;gl_Position=uProj*uView*w;}`;
+const FS=`precision mediump float;varying vec3 vN,vW;varying vec2 vUV;
+uniform vec3 uColor,uCam;uniform float uEmit,uAlpha;uniform int uUseTex;uniform sampler2D uTex;
+void main(){vec3 base=uColor;float ta=1.0;
+if(uUseTex==1){vec4 t=texture2D(uTex,vUV);if(t.a<0.02)discard;base=uColor*t.rgb;ta=t.a;}
+vec3 N=normalize(vN);vec3 V=normalize(uCam-vW);
+float diff=max(dot(N,normalize(vec3(0.35,0.85,0.4))),0.0);
+float rim=pow(1.0-max(dot(N,V),0.0),2.0);
+vec3 col=base*(0.4+0.6*diff)+base*rim*1.3;
+col=mix(col,base,uEmit);
+float d=length(uCam-vW);float f=clamp((d-7.0)/45.0,0.0,1.0);
+col=mix(col,vec3(0.018,0.028,0.05),f);
+gl_FragColor=vec4(col,uAlpha*ta);}`;
+
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);
+  if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(o);return o;}
+const prog=gl.createProgram();
+gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));
+gl.bindAttribLocation(prog,0,"aPos");gl.bindAttribLocation(prog,1,"aNor");gl.bindAttribLocation(prog,2,"aUV");
+gl.linkProgram(prog);gl.useProgram(prog);
+const U={};for(const n of["uProj","uView","uModel","uColor","uCam","uEmit","uAlpha","uUseTex","uTex"])
+  U[n]=gl.getUniformLocation(prog,n);
+
+/* ---------- geometry ---------- */
+function mesh(pos,nor,uv,idx,mode){
+  const vao={mode:mode||gl.TRIANGLES,count:idx?idx.length:pos.length/3};
+  vao.pos=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vao.pos);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);
+  vao.nor=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vao.nor);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(nor||pos),gl.STATIC_DRAW);
+  vao.uv=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vao.uv);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(uv||new Array(vao.count*2).fill(0)),gl.STATIC_DRAW);
+  if(idx){vao.idx=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,vao.idx);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);}
+  return vao;
+}
+function draw(v){
+  gl.bindBuffer(gl.ARRAY_BUFFER,v.pos);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,v.nor);gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,v.uv);gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,2,gl.FLOAT,false,0,0);
+  if(v.idx){gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,v.idx);gl.drawElements(v.mode,v.count,gl.UNSIGNED_SHORT,0);}
+  else gl.drawArrays(v.mode,0,v.count);
+}
+// cube
+function cube(){const p=[],n=[],u=[],id=[];
+  const f=[[[1,0,0],[0,1,0],[0,0,1]],[[-1,0,0],[0,1,0],[0,0,-1]],[[0,1,0],[0,0,1],[1,0,0]],
+    [[0,-1,0],[0,0,-1],[1,0,0]],[[0,0,1],[0,1,0],[-1,0,0]],[[0,0,-1],[0,1,0],[1,0,0]]];
+  let vi=0;for(const[nr,a,b]of f){for(const[s,t]of[[-1,-1],[1,-1],[1,1],[-1,1]]){
+    p.push(nr[0]+a[0]*s+b[0]*t,nr[1]+a[1]*s+b[1]*t,nr[2]+a[2]*s+b[2]*t);
+    n.push(nr[0],nr[1],nr[2]);u.push((s+1)/2,(t+1)/2);}
+    id.push(vi,vi+1,vi+2,vi,vi+2,vi+3);vi+=4;}
+  return mesh(p,n,u,id);
+}
+// octahedron (the drone core)
+function octa(){const v=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const faces=[[4,0,2],[4,2,1],[4,1,3],[4,3,0],[5,2,0],[5,1,2],[5,3,1],[5,0,3]];
+  const p=[],n=[];for(const f of faces){const a=v[f[0]],b=v[f[1]],c=v[f[2]];
+    const nx=(a[0]+b[0]+c[0]),ny=(a[1]+b[1]+c[1]),nz=(a[2]+b[2]+c[2]);
+    for(const q of[a,b,c]){p.push(q[0],q[1],q[2]);n.push(nx,ny,nz);}}
+  return mesh(p,n,null,null);
+}
+// grid lines on the floor + faint dome ribs
+function grid(){const p=[],half=22,step=2;
+  for(let i=-half;i<=half;i+=step){p.push(i,0,-half,i,0,half);p.push(-half,0,i,half,0,i);}
+  return mesh(p,p,null,null,gl.LINES);
+}
+// quad for HUD
+function quad(){return mesh([-1,-1,0,1,-1,0,1,1,0,-1,1,0],[0,0,1,0,0,1,0,0,1,0,0,1],
+  [0,1,1,1,1,0,0,0],[0,1,2,0,2,3]);}
+
+const MESH={cube:cube(),octa:octa(),grid:grid(),quad:quad()};
+
+/* ---------- HUD texture (for VR world-panel) ---------- */
+const hudCan=document.createElement("canvas");hudCan.width=512;hudCan.height=200;
+const hx=hudCan.getContext("2d");
+const hudTex=gl.createTexture();
+function updateHudTex(){
+  hx.clearRect(0,0,512,200);
+  hx.textAlign="center";hx.fillStyle="#7fe9ff";
+  hx.font="bold 30px ui-monospace,monospace";
+  hx.fillText("SWARM // OVERLORD-9",256,38);
+  hx.font="bold 64px ui-monospace,monospace";hx.fillStyle="#00f0ff";
+  hx.fillText(G.score.toString(),256,108);
+  hx.font="bold 20px ui-monospace,monospace";hx.fillStyle="#ff2d6b";
+  hx.fillText("WAVE "+G.wave,120,150);
+  hx.fillStyle="#b14bff";hx.fillText("x"+G.mult,392,150);
+  // hp bar
+  hx.strokeStyle="#1b5563";hx.strokeRect(96,168,320,16);
+  hx.fillStyle=G.hp>50?"#00f0ff":G.hp>25?"#ffd23f":"#ff2d6b";
+  hx.fillRect(98,170,316*Math.max(0,G.hp)/100,12);
+  gl.bindTexture(gl.TEXTURE_2D,hudTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,hudCan);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+}
+
+/* ---------- audio (synth, no assets) ---------- */
+let AC=null;
+function initAudio(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}}
+function blip(freq,f2,dur,type,vol){if(!AC)return;const t=AC.currentTime;
+  const o=AC.createOscillator(),g=AC.createGain();o.type=type||"square";
+  o.frequency.setValueAtTime(freq,t);o.frequency.exponentialRampToValueAtTime(Math.max(40,f2),t+dur);
+  g.gain.setValueAtTime((vol||.2),t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+dur);}
+function noise(dur,vol){if(!AC)return;const t=AC.currentTime;
+  const b=AC.createBuffer(1,AC.sampleRate*dur,AC.sampleRate);const d=b.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*(1-i/d.length);
+  const s=AC.createBufferSource();s.buffer=b;const g=AC.createGain();
+  g.gain.setValueAtTime(vol||.25,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  const f=AC.createBiquadFilter();f.type="lowpass";f.frequency.value=1400;
+  s.connect(f);f.connect(g);g.connect(AC.destination);s.start(t);}
+const SFX={shoot:()=>blip(720,180,.12,"square",.14),boom:()=>{noise(.28,.3);blip(160,50,.25,"sawtooth",.12);},
+  hurt:()=>{blip(90,40,.3,"sawtooth",.28);},wave:()=>{blip(300,760,.35,"triangle",.18);}};
+
+/* ---------- game state ---------- */
+const G={mode:"menu",score:0,wave:0,hp:100,mult:1,combo:0,comboT:0,
+  drones:[],bolts:[],parts:[],toSpawn:0,spawnT:0,alive:0,shake:0,t:0};
+const HEAD=[0,1.6,0]; // player head (approx; overwritten by real VR pose for collision)
+
+function reset(){G.score=0;G.wave=0;G.hp=100;G.mult=1;G.combo=0;G.drones.length=0;
+  G.bolts.length=0;G.parts.length=0;G.mode="play";nextWave();syncHUD();}
+function nextWave(){G.wave++;G.toSpawn=3+G.wave*2;G.spawnT=0;SFX.wave();banner("WAVE "+G.wave);}
+function spawnDrone(){
+  const a=Math.random()*Math.PI*2,el=(Math.random()*0.5+0.1),r=16+Math.random()*4;
+  const p=[Math.cos(a)*r,HEAD[1]+Math.sin(el)*6-1.2+Math.random()*2,Math.sin(a)*r];
+  const spd=1.1+G.wave*0.14+Math.random()*0.5;
+  G.drones.push({p,spd,hp:1,spin:Math.random()*6,rs:1+Math.random()*0.6,
+    col:Math.random()<0.22?[1,.82,.25]:[1,.18,.42]});
+}
+function fire(origin,dir){
+  if(G.mode!=="play")return;
+  G.bolts.push({p:[origin[0],origin[1],origin[2]],d:[dir[0],dir[1],dir[2]],life:1.4});
+  SFX.shoot();
+}
+function explode(p,col){
+  const n=reduce?5:12;
+  for(let i=0;i<n;i++){G.parts.push({p:[p[0],p[1],p[2]],
+    v:[(Math.random()*2-1)*3,(Math.random()*2-1)*3,(Math.random()*2-1)*3],
+    life:.5+Math.random()*.4,col});}
+  SFX.boom();
+}
+function hitPlayer(){
+  G.hp-=16;G.combo=0;G.mult=1;G.shake=reduce?0:.5;
+  flash();SFX.hurt();syncHUD();
+  if(G.hp<=0){G.hp=0;gameOver();}
+}
+function gameOver(){G.mode="over";syncHUD();
+  document.getElementById("menu").style.display="flex";
+  document.querySelector(".eyebrow").textContent="Grid Breached";
+  document.querySelector("h1").innerHTML='OVERLORD&#8209;9<span class="n"> WINS</span>';
+  document.querySelector(".sub").innerHTML="Final score <b style='color:var(--cyan)'>"+G.score+
+    "</b> &mdash; reached wave "+G.wave+". Reboot the grid and try again.";
+  document.getElementById("btnDesk").textContent="Reboot (Desktop)";
+  document.getElementById("vrNote").textContent="";
+  if(xrSession){try{xrSession.end();}catch(e){}}
+}
+
+/* ---------- update ---------- */
+function collideBolts(){
+  for(let i=G.bolts.length-1;i>=0;i--){const b=G.bolts[i];let hit=false;
+    for(let j=G.drones.length-1;j>=0;j--){const d=G.drones[j];
+      const dx=d.p[0]-b.p[0],dy=d.p[1]-b.p[1],dz=d.p[2]-b.p[2];
+      if(dx*dx+dy*dy+dz*dz< (d.rs*0.6+0.4)*(d.rs*0.6+0.4)){
+        explode(d.p,d.col);G.drones.splice(j,1);
+        G.combo++;G.mult=1+Math.floor(G.combo/4);
+        G.score+=10*G.mult;G.comboT=1.2;hit=true;syncHUD();
+        const cc=document.getElementById("combo");
+        cc.textContent="x"+G.mult;cc.style.opacity=G.mult>1?"1":"0";
+        break;}
+    }
+    if(hit)G.bolts.splice(i,1);
+  }
+}
+function update(dt,head){
+  G.t+=dt;if(head)HEAD[0]=head[0],HEAD[1]=head[1],HEAD[2]=head[2];
+  if(G.mode!=="play")return;
+  // spawn
+  if(G.toSpawn>0){G.spawnT-=dt;if(G.spawnT<=0){spawnDrone();G.toSpawn--;
+    G.spawnT=Math.max(.25,1.1-G.wave*0.05);}}
+  else if(G.drones.length===0)nextWave();
+  // drones toward head
+  for(let i=G.drones.length-1;i>=0;i--){const d=G.drones[i];d.spin+=dt*2.5;
+    let dx=HEAD[0]-d.p[0],dy=HEAD[1]-d.p[1],dz=HEAD[2]-d.p[2];
+    const L=Math.hypot(dx,dy,dz)||1;const st=d.spd*dt;
+    d.p[0]+=dx/L*st;d.p[1]+=dy/L*st;d.p[2]+=dz/L*st;
+    if(L<0.9){G.drones.splice(i,1);hitPlayer();}
+  }
+  // bolts
+  for(let i=G.bolts.length-1;i>=0;i--){const b=G.bolts[i];b.life-=dt;
+    const s=26*dt;b.p[0]+=b.d[0]*s;b.p[1]+=b.d[1]*s;b.p[2]+=b.d[2]*s;
+    if(b.life<=0)G.bolts.splice(i,1);}
+  collideBolts();
+  // particles
+  for(let i=G.parts.length-1;i>=0;i--){const q=G.parts[i];q.life-=dt;
+    q.p[0]+=q.v[0]*dt;q.p[1]+=q.v[1]*dt;q.p[2]+=q.v[2]*dt;q.v[1]-=4*dt;
+    if(q.life<=0)G.parts.splice(i,1);}
+  // combo decay
+  if(G.comboT>0){G.comboT-=dt;if(G.comboT<=0){G.combo=0;G.mult=1;
+    document.getElementById("combo").style.opacity="0";}}
+  if(G.shake>0)G.shake=Math.max(0,G.shake-dt*2);
+}
+
+/* ---------- render ---------- */
+const mProj=new Float32Array(16),mView=new Float32Array(16),mModel=new Float32Array(16),mTmp=new Float32Array(16);
+function setModel(m){gl.uniformMatrix4fv(U.uModel,false,m);}
+function col(c,e,a){gl.uniform3f(U.uColor,c[0],c[1],c[2]);gl.uniform1f(U.uEmit,e);gl.uniform1f(U.uAlpha,a==null?1:a);}
+function renderScene(proj,view,cam){
+  gl.uniformMatrix4fv(U.uProj,false,proj);gl.uniformMatrix4fv(U.uView,false,view);
+  gl.uniform3f(U.uCam,cam[0],cam[1],cam[2]);gl.uniform1i(U.uUseTex,0);
+  // opaque pass
+  gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.BLEND);
+  // grid
+  M.model(mModel,[0,0,0],1,0,0);setModel(mModel);col([0,.72,.86],1,1);draw(MESH.grid);
+  M.model(mModel,[0,10,0],1,0,0);setModel(mModel);col([.05,.28,.4],1,1);draw(MESH.grid); // ceiling rib
+  // drones
+  for(const d of G.drones){M.model(mModel,d.p,d.rs*0.6,d.spin,d.spin*0.5);setModel(mModel);
+    col(d.col,0,1);draw(MESH.octa);}
+  // controller guns
+  for(const c of controllers){if(!c.m)continue;
+    M.mul(mModel,c.m,gunLocal);setModel(mModel);col([.5,.95,1],0,1);draw(MESH.cube);
+    M.mul(mModel,c.m,beamLocal);setModel(mModel);col([0,.94,1],1,.9);draw(MESH.cube);}
+  // additive pass: bolts + particles + hud
+  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);gl.depthMask(false);
+  for(const b of G.bolts){M.fromDir(mModel,b.p,b.d,0.06,0.5);setModel(mModel);
+    col([.3,1,1],1,1);draw(MESH.cube);}
+  for(const q of G.parts){const a=Math.max(0,q.life);M.model(mModel,q.p,0.09*a+0.02,q.life*8,0);
+    setModel(mModel);col(q.col,1,a);draw(MESH.cube);}
+  // HUD world panel (VR) — faces +Z toward player start
+  if(G.mode==="play"||G.mode==="over"){
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform1i(U.uUseTex,1);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,hudTex);
+    gl.uniform1i(U.uTex,0);
+    M.model(mModel,[0,2.4,-5],1,0,0);mModel[0]*=1.4;mModel[5]*=0.55;setModel(mModel);
+    col([1,1,1],1,1);draw(MESH.quad);
+    gl.uniform1i(U.uUseTex,0);
+  }
+  gl.depthMask(true);gl.disable(gl.BLEND);
+}
+
+/* controller local transforms */
+const gunLocal=new Float32Array(16),beamLocal=new Float32Array(16);
+M.model(gunLocal,[0,0,0],1,0,0);gunLocal[0]=0.03;gunLocal[5]=0.03;gunLocal[10]=0.08;
+M.model(beamLocal,[0,0,-6],1,0,0);beamLocal[0]=0.006;beamLocal[5]=0.006;beamLocal[10]=6;
+const controllers=[{m:null},{m:null}];
+
+/* ---------- desktop path ---------- */
+let yaw=0,pitch=0,dLoop=0;
+function desktopView(out){
+  const cx=Math.cos(pitch),fx=cx*Math.sin(yaw),fy=Math.sin(pitch),fz=-cx*Math.cos(yaw);
+  let sh=0;if(G.shake>0)sh=(Math.random()*2-1)*G.shake*0.06;
+  M.lookAt(out,[HEAD[0]+sh,HEAD[1],HEAD[2]],[HEAD[0]+fx,HEAD[1]+fy,HEAD[2]+fz],[0,1,0]);
+  return [fx,fy,fz];
+}
+function desktopFrame(t){
+  if(xrSession){dLoop=0;return;}
+  dLoop=requestAnimationFrame(desktopFrame);
+  const dt=Math.min(.05,(t-(desktopFrame.p||t))/1000);desktopFrame.p=t;
+  update(dt,HEAD);updateHudTex();
+  const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(2,devicePixelRatio||1);
+  if(canvas.width!==w*dpr||canvas.height!==h*dpr){canvas.width=w*dpr;canvas.height=h*dpr;}
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(.02,.03,.055,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  M.perspective(mProj,70*Math.PI/180,canvas.width/canvas.height,.1,220);
+  desktopView(mView);
+  renderScene(mProj,mView,HEAD);
+}
+function startDesktop(){
+  document.getElementById("menu").style.display="none";
+  document.getElementById("hud").style.display="block";
+  document.getElementById("xhair").style.display="block";
+  initAudio();reset();canvas.requestPointerLock&&canvas.requestPointerLock();
+  desktopFrame.p=0;if(!dLoop)desktopFrame(performance.now());
+}
+canvas.addEventListener("click",()=>{
+  if(xrSession)return;
+  if(document.pointerLockElement!==canvas){canvas.requestPointerLock&&canvas.requestPointerLock();return;}
+  if(G.mode==="play"){const f=desktopView(mTmp);
+    fire([HEAD[0],HEAD[1],HEAD[2]],f);G.combo=G.combo;} // fire along view
+});
+addEventListener("mousemove",e=>{if(document.pointerLockElement!==canvas)return;
+  yaw+=e.movementX*0.0022;pitch-=e.movementY*0.0022;
+  pitch=Math.max(-1.2,Math.min(1.2,pitch));});
+
+/* ---------- VR path ---------- */
+let xrSession=null,xrRef=null,xrLayer=null,glR=null;
+async function startVR(){
+  try{
+    initAudio();
+    xrSession=await navigator.xr.requestSession("immersive-vr",{optionalFeatures:["local-floor"]});
+    await gl.makeXRCompatible();
+    xrLayer=new XRWebGLLayer(xrSession,gl);
+    xrSession.updateRenderState({baseLayer:xrLayer});
+    xrRef=await xrSession.requestReferenceSpace("local-floor").catch(()=>xrSession.requestReferenceSpace("local"));
+    xrSession.addEventListener("end",()=>{xrSession=null;if(G.mode==="play"){/*keep state*/}
+      if(!dLoop&&G.mode==="play")desktopFrame(performance.now());});
+    xrSession.addEventListener("selectstart",onSelect);
+    document.getElementById("menu").style.display="none";
+    reset();
+    xrSession.requestAnimationFrame(onXRFrame);
+  }catch(e){document.getElementById("vrNote").textContent="Could not start VR: "+e.message;}
+}
+function onSelect(ev){
+  if(G.mode!=="play")return;
+  const pose=ev.frame.getPose(ev.inputSource.targetRaySpace,xrRef);
+  if(!pose)return;const m=pose.transform.matrix;
+  fire([m[12],m[13],m[14]],[-m[8],-m[9],-m[10]]);
+}
+function onXRFrame(t,frame){
+  const s=frame.session;s.requestAnimationFrame(onXRFrame);
+  const dt=Math.min(.05,(t-(onXRFrame.p||t))/1000);onXRFrame.p=t;
+  const pose=frame.getViewerPose(xrRef);
+  // controllers
+  controllers[0].m=controllers[1].m=null;let ci=0;
+  for(const src of s.inputSources){if(src.targetRaySpace&&ci<2){
+    const p=frame.getPose(src.targetRaySpace,xrRef);if(p)controllers[ci].m=p.transform.matrix;ci++;}}
+  let head=HEAD;if(pose){const pos=pose.transform.position;head=[pos.x,pos.y,pos.z];}
+  update(dt,head);updateHudTex();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,xrLayer.framebuffer);
+  gl.clearColor(.02,.03,.055,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  if(pose)for(const v of pose.views){const vp=xrLayer.getViewport(v);
+    gl.viewport(vp.x,vp.y,vp.width,vp.height);
+    renderScene(v.projectionMatrix,v.transform.inverse.matrix,
+      [v.transform.position.x,v.transform.position.y,v.transform.position.z]);}
+}
+
+/* ---------- HUD / fx / ui ---------- */
+function syncHUD(){document.getElementById("score").textContent=G.score;
+  document.getElementById("wave").textContent=G.wave;
+  const f=document.getElementById("hpfill");f.style.width=Math.max(0,G.hp)+"%";
+  f.style.background=G.hp>50?"linear-gradient(90deg,var(--cyan),#66f7ff)":
+    G.hp>25?"linear-gradient(90deg,var(--amber),#ffe58a)":"linear-gradient(90deg,var(--magenta),#ff6f97)";}
+function flash(){const el=document.getElementById("flash");el.style.opacity=".5";
+  setTimeout(()=>el.style.opacity="0",110);}
+function banner(txt){const b=document.getElementById("banner");b.textContent=txt;
+  b.style.opacity="1";b.style.transition="none";
+  requestAnimationFrame(()=>{b.style.transition="opacity .8s ease .5s";b.style.opacity="0";});}
+
+document.getElementById("btnDesk").addEventListener("click",startDesktop);
+document.getElementById("btnVR").addEventListener("click",startVR);
+
+// feature-detect VR
+(async()=>{const note=document.getElementById("vrNote"),btn=document.getElementById("btnVR");
+  if(navigator.xr&&await navigator.xr.isSessionSupported("immersive-vr").catch(()=>false)){
+    note.innerHTML="Headset detected &mdash; put it on and hit <b style='color:var(--cyan)'>Enter VR</b>.";
+  }else{btn.disabled=true;
+    note.innerHTML="No VR headset here &mdash; <b style='color:var(--cyan)'>Play on Desktop</b>. "+
+      "(Open this page in a Quest browser to play in VR.)";}
+})();
+addEventListener("resize",()=>{});
+</script>
+</body>
+</html>
