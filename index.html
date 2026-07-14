@@ -91,6 +91,30 @@
     font-size:clamp(28px,6vw,46px);font-weight:800;letter-spacing:.14em;text-transform:uppercase;
     color:var(--violet);text-shadow:0 0 24px rgba(177,75,255,.6);opacity:0;pointer-events:none;
     text-align:center;white-space:nowrap}
+  .tr{top:52px;right:20px;left:auto;flex-direction:column;align-items:flex-end;gap:3px}
+  .heatbar{width:150px;height:8px;border:1px solid #1b5563;border-radius:2px;overflow:hidden;background:rgba(0,0,0,.4)}
+  .heatfill{height:100%;width:0%;background:linear-gradient(90deg,#2a7d8c,var(--cyan));transition:width .1s}
+  .heatfill.hot{background:linear-gradient(90deg,var(--amber),var(--magenta))}
+  #mute{position:fixed;top:14px;right:20px;z-index:9;pointer-events:auto;background:transparent;
+    color:var(--cyan);box-shadow:inset 0 0 0 1px #1b5563;padding:6px 10px;font-size:12px;display:none}
+  #rapid{position:fixed;left:50%;top:63%;transform:translateX(-50%);z-index:6;color:var(--cyan);
+    font-weight:800;letter-spacing:.3em;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;
+    text-shadow:0 0 14px var(--cyan)}
+  #overheat{position:fixed;left:50%;top:58%;transform:translateX(-50%);z-index:6;color:var(--magenta);
+    font-weight:800;letter-spacing:.22em;font-size:15px;opacity:0;transition:opacity .15s;pointer-events:none;
+    text-shadow:0 0 14px var(--magenta)}
+  #board{margin:0 0 20px}
+  .bt{font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:#5f818b;margin-bottom:8px}
+  .lbrow{display:flex;justify-content:space-between;gap:10px;padding:3px 6px;color:#a9cdd6;
+    font-size:13px;font-variant-numeric:tabular-nums}
+  .lbrow .r{color:#5f818b;width:22px;text-align:right}
+  .lbrow .nm{flex:1;text-align:left;letter-spacing:.14em;color:var(--cyan)}
+  #initials{display:none;margin:0 0 18px}
+  .ib{font-size:12px;color:var(--violet);letter-spacing:.12em;margin-bottom:10px}
+  #ini{font:inherit;font-size:30px;font-weight:800;letter-spacing:.5em;text-align:center;text-transform:uppercase;
+    width:160px;background:rgba(0,0,0,.4);border:1px solid #1b5563;color:var(--cyan);padding:8px 8px 8px 20px;
+    border-radius:3px;caret-color:var(--cyan)}
+  #ini:focus{outline:2px solid var(--amber);outline-offset:2px}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -99,11 +123,16 @@
 <div id="xhair"></div>
 <div id="flash"></div>
 <div id="banner"></div>
+<div id="overheat">OVERHEAT &mdash; VENTING</div>
+<div id="rapid">RAPID FIRE</div>
+<button id="mute" aria-label="Toggle music">&#9834; ON</button>
 
 <div id="hud" aria-hidden="true">
   <div class="row tl"><span class="lab">Score</span><span class="val" id="score">0</span>
     <span id="combo">x1</span></div>
   <div class="row tc"><span class="lab">Wave</span><span class="val mag" id="wave">1</span></div>
+  <div class="row tr"><div class="heatbar"><div class="heatfill" id="heatfill"></div></div>
+    <div class="hplab" style="margin-top:2px">Weapon Heat</div></div>
   <div class="hpwrap"><div class="hpbar"><div class="hpfill" id="hpfill"></div></div>
     <div class="hplab">Hull Integrity</div></div>
 </div>
@@ -120,6 +149,11 @@
       <div><span class="k">Combo</span> chain hits without missing to multiply score.</div>
       <div><span class="k">Danger</span> every drone that reaches you burns hull. Zero = down.</div>
     </div>
+    <div id="initials">
+      <div class="ib">TOP SCORE &mdash; ENTER YOUR CALLSIGN</div>
+      <input id="ini" maxlength="3" autocomplete="off" spellcheck="false" placeholder="AAA" aria-label="Callsign">
+    </div>
+    <div id="board"><div class="bt">Grid Defenders &mdash; Top Scores</div><div id="lblist"></div></div>
     <div class="btns">
       <button id="btnVR">Enter VR</button>
       <button id="btnDesk" class="ghost">Play on Desktop</button>
@@ -271,6 +305,8 @@ function updateHudTex(){
   hx.strokeStyle="#1b5563";hx.strokeRect(96,168,320,16);
   hx.fillStyle=G.hp>50?"#00f0ff":G.hp>25?"#ffd23f":"#ff2d6b";
   hx.fillRect(98,170,316*Math.max(0,G.hp)/100,12);
+  hx.strokeStyle="#12303a";hx.strokeRect(96,6,320,6);
+  hx.fillStyle=G.oh?"#ff2d6b":G.heat>75?"#ffd23f":"#2a7d8c";hx.fillRect(96,6,320*G.heat/100,6);
   gl.bindTexture(gl.TEXTURE_2D,hudTex);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,hudCan);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
@@ -294,16 +330,64 @@ function noise(dur,vol){if(!AC)return;const t=AC.currentTime;
   const f=AC.createBiquadFilter();f.type="lowpass";f.frequency.value=1400;
   s.connect(f);f.connect(g);g.connect(AC.destination);s.start(t);}
 const SFX={shoot:()=>blip(720,180,.12,"square",.14),boom:()=>{noise(.28,.3);blip(160,50,.25,"sawtooth",.12);},
-  hurt:()=>{blip(90,40,.3,"sawtooth",.28);},wave:()=>{blip(300,760,.35,"triangle",.18);}};
+  hurt:()=>{blip(90,40,.3,"sawtooth",.28);},wave:()=>{blip(300,760,.35,"triangle",.18);},
+  pick:()=>{blip(520,1040,.18,"triangle",.2);},clunk:()=>{blip(120,80,.1,"square",.12);}};
+
+/* ---------- background music (synth loop) ---------- */
+const MUSIC={on:false,step:0,g:null,timer:null};
+function musicStart(){if(!AC||MUSIC.on)return;MUSIC.on=true;
+  MUSIC.g=AC.createGain();MUSIC.g.gain.value=G.muted?0:0.1;MUSIC.g.connect(AC.destination);
+  const scale=[0,3,5,7,10,12],root=110;
+  MUSIC.timer=setInterval(()=>{if(!AC||!MUSIC.g)return;const t=AC.currentTime,s=MUSIC.step++;
+    if(s%2===0){const o=AC.createOscillator(),g=AC.createGain();o.type="sawtooth";
+      o.frequency.value=root*Math.pow(2,(s%8<4?0:5)/12)/2;
+      g.gain.setValueAtTime(.5,t);g.gain.exponentialRampToValueAtTime(.001,t+.34);
+      o.connect(g);g.connect(MUSIC.g);o.start(t);o.stop(t+.35);}
+    const n=scale[(s*3)%scale.length],o2=AC.createOscillator(),g2=AC.createGain();
+    o2.type="triangle";o2.frequency.value=root*2*Math.pow(2,n/12);
+    g2.gain.setValueAtTime(.26,t);g2.gain.exponentialRampToValueAtTime(.001,t+.2);
+    o2.connect(g2);g2.connect(MUSIC.g);o2.start(t);o2.stop(t+.21);},200);}
+function setMute(m){G.muted=m;try{localStorage.setItem("swarm_mute",m?"1":"0");}catch(e){}
+  if(MUSIC.g)MUSIC.g.gain.value=m?0:0.1;
+  const b=document.getElementById("mute");if(b)b.innerHTML=(m?"&#9834; OFF":"&#9834; ON");}
+
+/* ---------- pickups + overheat helpers ---------- */
+function showOverheat(on){const el=document.getElementById("overheat");if(el)el.style.opacity=on?"1":"0";}
+function maybeDrop(d){if(d.boss||Math.random()<0.10){const hp=Math.random()<0.5;
+  G.pickups.push({p:[d.p[0],d.p[1],d.p[2]],type:hp?"hp":"rapid",spin:0,life:12,col:hp?[.2,1,.5]:[0,.9,1]});}}
+function collect(k){if(k.type==="hp"){G.hp=Math.min(100,G.hp+25);banner("+25 HULL");}
+  else{G.rapidT=6;const r=document.getElementById("rapid");if(r)r.style.opacity="1";banner("RAPID FIRE");}
+  SFX.pick();syncHUD();}
+
+/* ---------- leaderboard (local top-10; global if LB_URL set) ---------- */
+const LB_URL="";  /* paste your Cloudflare Worker URL here for a GLOBAL board (see worker.js) */
+function lbLocal(){try{return JSON.parse(localStorage.getItem("swarm_lb")||"[]");}catch(e){return[];}}
+function lbSort(a){return(a||[]).filter(x=>x&&x.n&&typeof x.s==="number").sort((p,q)=>q.s-p.s).slice(0,10);}
+async function lbGet(){if(LB_URL){try{const r=await fetch(LB_URL,{cache:"no-store"});const j=await r.json();
+  return lbSort(j.scores||j);}catch(e){}}return lbSort(lbLocal());}
+async function lbSubmit(n,s,w){n=(n||"AAA").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,3)||"AAA";
+  const e={n,s,w};if(LB_URL){try{const cur=await lbGet();const nx=lbSort(cur.concat([e]));
+    await fetch(LB_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scores:nx})});
+    try{localStorage.setItem("swarm_lb",JSON.stringify(nx));}catch(_){}return nx;}catch(err){}}
+  const nx=lbSort(lbLocal().concat([e]));try{localStorage.setItem("swarm_lb",JSON.stringify(nx));}catch(_){}return nx;}
+async function renderBoard(){const list=document.getElementById("lblist");if(!list)return;
+  const a=await lbGet();list.innerHTML=a.length?a.map((x,i)=>
+    '<div class="lbrow"><span class="r">'+(i+1)+'</span><span class="nm">'+x.n+'</span><span>'+x.s+'</span></div>').join("")
+    :'<div class="lbrow" style="color:#5f818b">No scores yet &mdash; be the first.</div>';}
 
 /* ---------- game state ---------- */
 const G={mode:"menu",score:0,wave:0,hp:100,mult:1,combo:0,comboT:0,
-  drones:[],bolts:[],parts:[],toSpawn:0,spawnT:0,alive:0,shake:0,t:0,best:0,boss:false,bossPending:false};
+  drones:[],bolts:[],parts:[],pickups:[],toSpawn:0,spawnT:0,alive:0,shake:0,t:0,best:0,boss:false,bossPending:false,
+  heat:0,oh:false,rapidT:0,muted:false,pending:null};
 try{G.best=+(localStorage.getItem("swarm_best")||0);}catch(e){}
+try{G.muted=localStorage.getItem("swarm_mute")==="1";}catch(e){}
 const HEAD=[0,1.6,0]; // player head (approx; overwritten by real VR pose for collision)
 
 function reset(){G.score=0;G.wave=0;G.hp=100;G.mult=1;G.combo=0;G.drones.length=0;
-  G.bolts.length=0;G.parts.length=0;G.mode="play";nextWave();syncHUD();}
+  G.bolts.length=0;G.parts.length=0;G.pickups.length=0;G.heat=0;G.oh=false;G.rapidT=0;G.pending=null;
+  document.getElementById("initials").style.display="none";showOverheat(false);
+  document.getElementById("rapid").style.opacity="0";
+  G.mode="play";nextWave();syncHUD();}
 function nextWave(){G.wave++;G.boss=(G.wave%5===0);G.bossPending=G.boss;
   G.toSpawn=G.boss?(3+G.wave):(3+G.wave*2);G.spawnT=0;SFX.wave();
   banner(G.boss?"⚠ OVERLORD CORE":"WAVE "+G.wave);}
@@ -320,9 +404,15 @@ function spark(p,col){for(let i=0;i<(reduce?2:4);i++){G.parts.push({p:[p[0],p[1]
   v:[(Math.random()*2-1)*2,(Math.random()*2-1)*2,(Math.random()*2-1)*2],life:.22+Math.random()*.2,col});}}
 function fire(origin,dir){
   if(G.mode!=="play")return;
-  G.bolts.push({p:[origin[0],origin[1],origin[2]],d:[dir[0],dir[1],dir[2]],life:1.4});
+  if(G.oh){SFX.clunk();return;}
+  const spread=G.rapidT>0?3:1;
+  for(let k=0;k<spread;k++){let dx=dir[0],dy=dir[1],dz=dir[2];
+    if(spread>1){dx+=(Math.random()*2-1)*0.05;dy+=(Math.random()*2-1)*0.05;dz+=(Math.random()*2-1)*0.05;}
+    G.bolts.push({p:[origin[0],origin[1],origin[2]],d:[dx,dy,dz],life:1.4});}
   G.parts.push({p:[origin[0]+dir[0]*0.5,origin[1]+dir[1]*0.5,origin[2]+dir[2]*0.5],
     v:[dir[0]*2,dir[1]*2,dir[2]*2],life:.12,col:[.65,1,1],flash:true});
+  G.heat=Math.min(100,G.heat+(G.rapidT>0?6:9));
+  if(G.heat>=100){G.oh=true;showOverheat(true);SFX.hurt();}
   SFX.shoot();
 }
 function explode(p,col){
@@ -347,6 +437,10 @@ function gameOver(){G.mode="over";syncHUD();
     ". Best <b style='color:var(--amber)'>"+G.best+"</b>. Reboot the grid and try again.";
   document.getElementById("btnDesk").textContent="Reboot (Desktop)";
   document.getElementById("vrNote").textContent="";
+  G.pending={s:G.score,w:G.wave};
+  if(G.score>0){document.getElementById("initials").style.display="block";
+    setTimeout(()=>{const ini=document.getElementById("ini");if(ini){ini.value="";ini.focus();}},60);}
+  renderBoard();
   if(xrSession){try{xrSession.end();}catch(e){}}
 }
 
@@ -358,7 +452,7 @@ function collideBolts(){
       if(dx*dx+dy*dy+dz*dz< (d.rs*0.6+0.4)*(d.rs*0.6+0.4)){
         hit=true;d.hp--;
         if(d.hp>0){spark(b.p,d.col);break;}
-        explode(d.p,d.col);if(d.boss)explode(d.p,d.col);hapticAll(d.boss?1:.6,d.boss?100:50);G.drones.splice(j,1);
+        explode(d.p,d.col);if(d.boss)explode(d.p,d.col);hapticAll(d.boss?1:.6,d.boss?100:50);maybeDrop(d);G.drones.splice(j,1);
         G.combo++;G.mult=1+Math.floor(G.combo/4);
         G.score+=(d.boss?150:10)*G.mult;G.comboT=1.2;syncHUD();
         const cc=document.getElementById("combo");
@@ -371,6 +465,15 @@ function collideBolts(){
 function update(dt,head){
   G.t+=dt;if(head)HEAD[0]=head[0],HEAD[1]=head[1],HEAD[2]=head[2];
   if(G.mode!=="play")return;
+  G.heat=Math.max(0,G.heat-(G.oh?45:32)*dt);
+  if(G.oh&&G.heat<40){G.oh=false;showOverheat(false);}
+  if(G.rapidT>0){G.rapidT-=dt;if(G.rapidT<=0){const r=document.getElementById("rapid");if(r)r.style.opacity="0";}}
+  const hf=document.getElementById("heatfill");
+  if(hf){hf.style.width=G.heat+"%";hf.className="heatfill"+(G.oh||G.heat>75?" hot":"");}
+  for(let i=G.pickups.length-1;i>=0;i--){const k=G.pickups[i];k.spin+=dt*2;k.life-=dt;
+    let px=HEAD[0]-k.p[0],py=HEAD[1]-k.p[1],pz=HEAD[2]-k.p[2];const PL=Math.hypot(px,py,pz)||1;
+    const ps=2.2*dt;k.p[0]+=px/PL*ps;k.p[1]+=py/PL*ps;k.p[2]+=pz/PL*ps;
+    if(PL<1.0){collect(k);G.pickups.splice(i,1);}else if(k.life<=0)G.pickups.splice(i,1);}
   // spawn
   if(G.toSpawn>0){G.spawnT-=dt;if(G.spawnT<=0){
     if(G.bossPending){spawnDrone(true);G.bossPending=false;}else spawnDrone(false);
@@ -415,6 +518,8 @@ function renderScene(proj,view,cam){
   // drones
   for(const d of G.drones){M.model(mModel,d.p,d.rs*0.6,d.spin,d.spin*0.5);setModel(mModel);
     col(d.col,0,1);draw(MESH.octa);}
+  for(const k of G.pickups){M.model(mModel,k.p,0.26,k.spin,k.spin*0.7);setModel(mModel);
+    col(k.col,0,1);draw(MESH.octa);}
   // controller guns
   for(const c of controllers){if(!c.m)continue;
     M.mul(mModel,c.m,gunLocal);setModel(mModel);col([.5,.95,1],0,1);draw(MESH.cube);
@@ -469,7 +574,8 @@ function startDesktop(){
   document.getElementById("menu").style.display="none";
   document.getElementById("hud").style.display="block";
   document.getElementById("xhair").style.display="block";
-  initAudio();reset();canvas.requestPointerLock&&canvas.requestPointerLock();
+  initAudio();musicStart();document.getElementById("mute").style.display="block";
+  reset();canvas.requestPointerLock&&canvas.requestPointerLock();
   desktopFrame.p=0;if(!dLoop)desktopFrame(performance.now());
 }
 canvas.addEventListener("click",()=>{
@@ -499,6 +605,7 @@ async function startVR(){
       if(!dLoop&&G.mode==="play")desktopFrame(performance.now());});
     xrSession.addEventListener("selectstart",onSelect);
     document.getElementById("menu").style.display="none";
+    musicStart();document.getElementById("mute").style.display="block";
     reset();
     xrSession.requestAnimationFrame(onXRFrame);
   }catch(e){document.getElementById("vrNote").textContent="Could not start VR: "+e.message;}
@@ -542,6 +649,13 @@ function banner(txt){const b=document.getElementById("banner");b.textContent=txt
 
 document.getElementById("btnDesk").addEventListener("click",startDesktop);
 document.getElementById("btnVR").addEventListener("click",startVR);
+document.getElementById("mute").addEventListener("click",()=>setMute(!G.muted));
+addEventListener("keydown",e=>{if(e.key==="m"||e.key==="M")setMute(!G.muted);});
+document.getElementById("ini").addEventListener("keydown",async e=>{
+  if(e.key==="Enter"&&G.pending){const n=document.getElementById("ini").value;
+    document.getElementById("initials").style.display="none";
+    await lbSubmit(n,G.pending.s,G.pending.w);G.pending=null;renderBoard();}});
+setMute(G.muted);renderBoard();
 
 // feature-detect VR
 (async()=>{const note=document.getElementById("vrNote"),btn=document.getElementById("btnVR");
