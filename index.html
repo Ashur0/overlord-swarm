@@ -312,14 +312,17 @@ function spawnDrone(boss){
   const p=[Math.cos(a)*r,HEAD[1]+Math.sin(el)*6-1.2+Math.random()*2,Math.sin(a)*r];
   if(boss){G.drones.push({p,spd:0.65+G.wave*0.04,hp:6+G.wave,spin:0,rs:2.6,boss:true,col:[.72,.35,1]});return;}
   const spd=1.1+G.wave*0.14+Math.random()*0.5;
-  G.drones.push({p,spd,hp:1,spin:Math.random()*6,rs:1+Math.random()*0.6,
-    col:Math.random()<0.22?[1,.82,.25]:[1,.18,.42]});
+  const strafe=G.wave>=3&&Math.random()<0.35;
+  G.drones.push({p,spd,hp:1,spin:Math.random()*6,rs:1+Math.random()*0.6,strafe,ph:Math.random()*6.28,
+    col:strafe?[.2,1,.7]:(Math.random()<0.22?[1,.82,.25]:[1,.18,.42])});
 }
 function spark(p,col){for(let i=0;i<(reduce?2:4);i++){G.parts.push({p:[p[0],p[1],p[2]],
   v:[(Math.random()*2-1)*2,(Math.random()*2-1)*2,(Math.random()*2-1)*2],life:.22+Math.random()*.2,col});}}
 function fire(origin,dir){
   if(G.mode!=="play")return;
   G.bolts.push({p:[origin[0],origin[1],origin[2]],d:[dir[0],dir[1],dir[2]],life:1.4});
+  G.parts.push({p:[origin[0]+dir[0]*0.5,origin[1]+dir[1]*0.5,origin[2]+dir[2]*0.5],
+    v:[dir[0]*2,dir[1]*2,dir[2]*2],life:.12,col:[.65,1,1],flash:true});
   SFX.shoot();
 }
 function explode(p,col){
@@ -331,7 +334,7 @@ function explode(p,col){
 }
 function hitPlayer(dmg){
   G.hp-=(dmg||16);G.combo=0;G.mult=1;G.shake=reduce?0:.6;
-  flash();SFX.hurt();syncHUD();
+  flash();SFX.hurt();hapticAll(1,130);syncHUD();
   if(G.hp<=0){G.hp=0;gameOver();}
 }
 function gameOver(){G.mode="over";syncHUD();
@@ -355,7 +358,7 @@ function collideBolts(){
       if(dx*dx+dy*dy+dz*dz< (d.rs*0.6+0.4)*(d.rs*0.6+0.4)){
         hit=true;d.hp--;
         if(d.hp>0){spark(b.p,d.col);break;}
-        explode(d.p,d.col);if(d.boss)explode(d.p,d.col);G.drones.splice(j,1);
+        explode(d.p,d.col);if(d.boss)explode(d.p,d.col);hapticAll(d.boss?1:.6,d.boss?100:50);G.drones.splice(j,1);
         G.combo++;G.mult=1+Math.floor(G.combo/4);
         G.score+=(d.boss?150:10)*G.mult;G.comboT=1.2;syncHUD();
         const cc=document.getElementById("combo");
@@ -378,6 +381,8 @@ function update(dt,head){
     let dx=HEAD[0]-d.p[0],dy=HEAD[1]-d.p[1],dz=HEAD[2]-d.p[2];
     const L=Math.hypot(dx,dy,dz)||1;const st=d.spd*dt;
     d.p[0]+=dx/L*st;d.p[1]+=dy/L*st;d.p[2]+=dz/L*st;
+    if(d.strafe){d.ph+=dt*3;const lx=-dz/L,lz=dx/L,lat=Math.sin(d.ph)*2.6*dt;
+      d.p[0]+=lx*lat;d.p[2]+=lz*lat;}
     if(L<(d.boss?1.6:0.9)){G.drones.splice(i,1);hitPlayer(d.boss?40:16);}
   }
   // bolts
@@ -418,8 +423,9 @@ function renderScene(proj,view,cam){
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);gl.depthMask(false);
   for(const b of G.bolts){M.fromDir(mModel,b.p,b.d,0.06,0.5);setModel(mModel);
     col([.3,1,1],1,1);draw(MESH.cube);}
-  for(const q of G.parts){const a=Math.max(0,q.life);M.model(mModel,q.p,0.09*a+0.02,q.life*8,0);
-    setModel(mModel);col(q.col,1,a);draw(MESH.cube);}
+  for(const q of G.parts){const a=Math.max(0,q.life);
+    const s=q.flash?(0.28*a+0.05):(0.09*a+0.02);
+    M.model(mModel,q.p,s,q.life*8,0);setModel(mModel);col(q.col,1,q.flash?1:a);draw(MESH.cube);}
   // HUD world panel (VR) — faces +Z toward player start
   if(G.mode==="play"||G.mode==="over"){
     gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
@@ -477,7 +483,10 @@ addEventListener("mousemove",e=>{if(document.pointerLockElement!==canvas)return;
   pitch=Math.max(-1.2,Math.min(1.2,pitch));});
 
 /* ---------- VR path ---------- */
-let xrSession=null,xrRef=null,xrLayer=null,glR=null;
+let xrSession=null,xrRef=null,xrLayer=null,glR=null,xrInputs=[];
+function haptic(src,i,d){try{const g=src&&src.gamepad;
+  if(g&&g.hapticActuators&&g.hapticActuators[0])g.hapticActuators[0].pulse(i,d);}catch(e){}}
+function hapticAll(i,d){if(xrSession)for(const s of xrInputs)haptic(s,i,d);}
 async function startVR(){
   try{
     initAudio();
@@ -499,13 +508,14 @@ function onSelect(ev){
   const pose=ev.frame.getPose(ev.inputSource.targetRaySpace,xrRef);
   if(!pose)return;const m=pose.transform.matrix;
   fire([m[12],m[13],m[14]],[-m[8],-m[9],-m[10]]);
+  haptic(ev.inputSource,.5,40);
 }
 function onXRFrame(t,frame){
   const s=frame.session;s.requestAnimationFrame(onXRFrame);
   const dt=Math.min(.05,(t-(onXRFrame.p||t))/1000);onXRFrame.p=t;
   const pose=frame.getViewerPose(xrRef);
   // controllers
-  controllers[0].m=controllers[1].m=null;let ci=0;
+  controllers[0].m=controllers[1].m=null;let ci=0;xrInputs=s.inputSources;
   for(const src of s.inputSources){if(src.targetRaySpace&&ci<2){
     const p=frame.getPose(src.targetRaySpace,xrRef);if(p)controllers[ci].m=p.transform.matrix;ci++;}}
   let head=HEAD;if(pose){const pos=pose.transform.position;head=[pos.x,pos.y,pos.z];}
