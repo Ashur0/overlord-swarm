@@ -271,7 +271,7 @@ const U={};for(const n of["uProj","uView","uModel","uColor","uCam","uEmit","uAlp
 /* ---------- bloom (desktop post-process; safe fallback to direct render) ---------- */
 const QVS="attribute vec3 aPos;attribute vec2 aUV;varying vec2 vUV;void main(){vUV=aUV;gl_Position=vec4(aPos.xy,0.0,1.0);}";
 const BLURFS="precision mediump float;varying vec2 vUV;uniform sampler2D uTex;uniform vec2 uTexel,uDir;uniform float uBright;"
-+"vec3 samp(vec2 uv){vec3 c=texture2D(uTex,uv).rgb;if(uBright>0.5){float l=max(max(c.r,c.g),c.b);c*=smoothstep(0.5,1.05,l);}return c;}"
++"vec3 samp(vec2 uv){vec3 c=texture2D(uTex,uv).rgb;if(uBright>0.5){float l=max(max(c.r,c.g),c.b);c*=smoothstep(0.65,1.15,l);}return c;}"
 +"void main(){vec2 o=uTexel*uDir;vec3 s=samp(vUV)*0.227+(samp(vUV+o*1.3846)+samp(vUV-o*1.3846))*0.316+(samp(vUV+o*3.2307)+samp(vUV-o*3.2307))*0.070;gl_FragColor=vec4(s,1.0);}";
 const COMPFS="precision mediump float;varying vec2 vUV;uniform sampler2D uScene,uBloom;uniform float uInt;"
 +"void main(){vec3 s=texture2D(uScene,vUV).rgb;vec3 b=texture2D(uBloom,vUV).rgb;gl_FragColor=vec4(s+b*uInt,1.0);}";
@@ -306,7 +306,7 @@ function drawBloom(){const w=canvas.width,h=canvas.height,hw=w>>1,hh=h>>1;
   gl.bindFramebuffer(gl.FRAMEBUFFER,fboB);gl.bindTexture(gl.TEXTURE_2D,texA);gl.uniform2f(uB.uDir,0,1);draw(MESH.quad);
   gl.useProgram(pComp);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);
   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,sceneTex);gl.uniform1i(uC.uScene,0);
-  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,texB);gl.uniform1i(uC.uBloom,1);gl.uniform1f(uC.uInt,1.15);draw(MESH.quad);
+  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,texB);gl.uniform1i(uC.uBloom,1);gl.uniform1f(uC.uInt,0.7);draw(MESH.quad);
   gl.activeTexture(gl.TEXTURE0);gl.useProgram(prog);}
 
 /* ---------- geometry ---------- */
@@ -491,7 +491,7 @@ function spawnDrone(boss){
   const a=Math.random()*Math.PI*2,el=(Math.random()*0.5+0.1),r=16+Math.random()*4;
   const p=[Math.cos(a)*r,HEAD[1]+Math.sin(el)*6-1.2+Math.random()*2,Math.sin(a)*r];
   if(boss){
-    if(G.avatar){G.avatarAlive=true;const mh=70+G.wave*3;
+    if(G.avatar){G.avatarAlive=true;const mh=45+G.wave*2;
       G.drones.push({p:[0,3.2,-13],spd:0,hp:mh,maxhp:mh,spin:0,sway:0,summonT:4,rs:5,boss:true,avatar:true,
         shooter:true,fireT:1.5,col:[.85,.25,1]});return;}
     const prime=G.prime;if(prime)G.primeAlive=true;
@@ -505,7 +505,7 @@ function spawnDrone(boss){
     col:shooter?[1,.5,0]:strafe?[.2,1,.7]:(Math.random()<0.22?[1,.82,.25]:[1,.18,.42])});
 }
 function efire(d){let dx=HEAD[0]-d.p[0],dy=HEAD[1]-d.p[1],dz=HEAD[2]-d.p[2];const L=Math.hypot(dx,dy,dz)||1;
-  const shots=d.avatar?9:d.prime?5:d.boss?3:1;
+  const shots=d.avatar?7:d.prime?5:d.boss?3:1;
   for(let k=0;k<shots;k++){let ox=dx/L,oy=dy/L,oz=dz/L;
     if(shots>1){ox+=(Math.random()*2-1)*0.13;oy+=(Math.random()*2-1)*0.13;oz+=(Math.random()*2-1)*0.13;}
     G.ebolts.push({p:[d.p[0],d.p[1],d.p[2]],d:[ox,oy,oz],life:3.5});}
