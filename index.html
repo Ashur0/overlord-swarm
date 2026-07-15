@@ -268,6 +268,47 @@ gl.linkProgram(prog);gl.useProgram(prog);
 const U={};for(const n of["uProj","uView","uModel","uColor","uCam","uEmit","uAlpha","uUseTex","uTex"])
   U[n]=gl.getUniformLocation(prog,n);
 
+/* ---------- bloom (desktop post-process; safe fallback to direct render) ---------- */
+const QVS="attribute vec3 aPos;attribute vec2 aUV;varying vec2 vUV;void main(){vUV=aUV;gl_Position=vec4(aPos.xy,0.0,1.0);}";
+const BLURFS="precision mediump float;varying vec2 vUV;uniform sampler2D uTex;uniform vec2 uTexel,uDir;uniform float uBright;"
++"vec3 samp(vec2 uv){vec3 c=texture2D(uTex,uv).rgb;if(uBright>0.5){float l=max(max(c.r,c.g),c.b);c*=smoothstep(0.5,1.05,l);}return c;}"
++"void main(){vec2 o=uTexel*uDir;vec3 s=samp(vUV)*0.227+(samp(vUV+o*1.3846)+samp(vUV-o*1.3846))*0.316+(samp(vUV+o*3.2307)+samp(vUV-o*3.2307))*0.070;gl_FragColor=vec4(s,1.0);}";
+const COMPFS="precision mediump float;varying vec2 vUV;uniform sampler2D uScene,uBloom;uniform float uInt;"
++"void main(){vec3 s=texture2D(uScene,vUV).rgb;vec3 b=texture2D(uBloom,vUV).rgb;gl_FragColor=vec4(s+b*uInt,1.0);}";
+let bloomOK=false,bloomW=0,bloomH=0,sceneFBO,sceneTex,sceneDepth,fboA,texA,fboB,texB,pBlur,pComp;
+const uB={},uC={};
+function _tex(w,h){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t;}
+function _fbo(tex){const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);return f;}
+function _prog2(fs){const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,QVS));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));
+  gl.bindAttribLocation(p,0,"aPos");gl.bindAttribLocation(p,2,"aUV");gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw"link";return p;}
+try{pBlur=_prog2(BLURFS);pComp=_prog2(COMPFS);
+  for(const n of["uTex","uTexel","uDir","uBright"])uB[n]=gl.getUniformLocation(pBlur,n);
+  for(const n of["uScene","uBloom","uInt"])uC[n]=gl.getUniformLocation(pComp,n);bloomOK=true;}catch(e){bloomOK=false;}
+function bloomResize(w,h){bloomW=w;bloomH=h;const hw=Math.max(1,w>>1),hh=Math.max(1,h>>1);
+  sceneTex=_tex(w,h);sceneFBO=_fbo(sceneTex);
+  sceneDepth=gl.createRenderbuffer();gl.bindRenderbuffer(gl.RENDERBUFFER,sceneDepth);
+  gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT16,w,h);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,sceneDepth);
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)bloomOK=false;
+  texA=_tex(hw,hh);fboA=_fbo(texA);texB=_tex(hw,hh);fboB=_fbo(texB);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);}
+function drawBloom(){const w=canvas.width,h=canvas.height,hw=w>>1,hh=h>>1;
+  gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);gl.useProgram(pBlur);gl.activeTexture(gl.TEXTURE0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fboA);gl.viewport(0,0,hw,hh);gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+  gl.uniform1i(uB.uTex,0);gl.uniform2f(uB.uTexel,1/hw,1/hh);gl.uniform2f(uB.uDir,1,0);gl.uniform1f(uB.uBright,1);draw(MESH.quad);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fboB);gl.bindTexture(gl.TEXTURE_2D,texA);gl.uniform2f(uB.uDir,0,1);gl.uniform1f(uB.uBright,0);draw(MESH.quad);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fboA);gl.bindTexture(gl.TEXTURE_2D,texB);gl.uniform2f(uB.uDir,1,0);draw(MESH.quad);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fboB);gl.bindTexture(gl.TEXTURE_2D,texA);gl.uniform2f(uB.uDir,0,1);draw(MESH.quad);
+  gl.useProgram(pComp);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,sceneTex);gl.uniform1i(uC.uScene,0);
+  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,texB);gl.uniform1i(uC.uBloom,1);gl.uniform1f(uC.uInt,1.15);draw(MESH.quad);
+  gl.activeTexture(gl.TEXTURE0);gl.useProgram(prog);}
+
 /* ---------- geometry ---------- */
 function mesh(pos,nor,uv,idx,mode){
   const vao={mode:mode||gl.TRIANGLES,count:idx?idx.length:pos.length/3};
@@ -637,6 +678,7 @@ function drawAvatar(d){
   col([1,0.5,0.7],1,1);draw(MESH.octaWire);
 }
 function renderScene(proj,view,cam){
+  gl.useProgram(prog);
   gl.uniformMatrix4fv(U.uProj,false,proj);gl.uniformMatrix4fv(U.uView,false,view);
   gl.uniform3f(U.uCam,cam[0],cam[1],cam[2]);gl.uniform1i(U.uUseTex,0);
   // opaque pass
@@ -703,11 +745,20 @@ function desktopFrame(t){
   update(gdt(dt),HEAD);updateHudTex();
   const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(2,devicePixelRatio||1);
   if(canvas.width!==w*dpr||canvas.height!==h*dpr){canvas.width=w*dpr;canvas.height=h*dpr;}
-  gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
-  gl.clearColor(.007,.005,.02,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  if(bloomOK&&(bloomW!==canvas.width||bloomH!==canvas.height))bloomResize(canvas.width,canvas.height);
   M.perspective(mProj,70*Math.PI/180,canvas.width/canvas.height,.1,220);
   desktopView(mView);
-  renderScene(mProj,mView,HEAD);
+  if(bloomOK){
+    try{
+      gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);gl.viewport(0,0,canvas.width,canvas.height);
+      gl.clearColor(.007,.005,.02,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+      renderScene(mProj,mView,HEAD);drawBloom();
+    }catch(e){bloomOK=false;gl.bindFramebuffer(gl.FRAMEBUFFER,null);}
+  }else{
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
+    gl.clearColor(.007,.005,.02,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    renderScene(mProj,mView,HEAD);
+  }
 }
 function startDesktop(){
   document.getElementById("menu").style.display="none";
