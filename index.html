@@ -115,6 +115,14 @@
     width:160px;background:rgba(0,0,0,.4);border:1px solid #1b5563;color:var(--cyan);padding:8px 8px 8px 20px;
     border-radius:3px;caret-color:var(--cyan)}
   #ini:focus{outline:2px solid var(--amber);outline-offset:2px}
+  #diffsel{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px}
+  .dl{font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:#5f818b}
+  .dbtns{display:flex;gap:8px}
+  .db{background:transparent;color:#8fb4bf;box-shadow:inset 0 0 0 1px #1b5563;padding:9px 16px;font-size:12px}
+  .db.sel{background:var(--cyan);color:var(--void);box-shadow:0 0 20px rgba(0,240,255,.4)}
+  #score{display:inline-block}
+  #score.pulse{animation:scPulse .26s ease}
+  @keyframes scPulse{0%{transform:scale(1)}45%{transform:scale(1.32);color:#fff}100%{transform:scale(1)}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -143,6 +151,13 @@
     <h1>SWARM<span class="n">//</span>OVERLORD&#8209;9</h1>
     <p class="sub">OVERLORD&#8209;9 is flooding your grid with attack drones. Hold the arena.
       Point, fire, don't let them reach you.</p>
+    <div id="diffsel"><span class="dl">Threat level</span>
+      <div class="dbtns">
+        <button class="db" data-d="0">Easy</button>
+        <button class="db" data-d="1">Normal</button>
+        <button class="db" data-d="2">Hard</button>
+      </div>
+    </div>
     <div class="rules">
       <div><span class="k">VR</span> <b>Trigger</b> to fire &mdash; aim with either controller.</div>
       <div><span class="k">Screen</span> <b>Mouse or drag</b> to aim &mdash; <b>click / tap</b> to fire.</div>
@@ -377,31 +392,53 @@ async function renderBoard(){const list=document.getElementById("lblist");if(!li
 
 /* ---------- game state ---------- */
 const G={mode:"menu",score:0,wave:0,hp:100,mult:1,combo:0,comboT:0,
-  drones:[],bolts:[],parts:[],pickups:[],toSpawn:0,spawnT:0,alive:0,shake:0,t:0,best:0,boss:false,bossPending:false,
-  heat:0,oh:false,rapidT:0,muted:false,pending:null};
+  drones:[],bolts:[],ebolts:[],parts:[],pickups:[],toSpawn:0,spawnT:0,alive:0,shake:0,t:0,best:0,boss:false,bossPending:false,
+  heat:0,oh:false,rapidT:0,muted:false,pending:null,diff:1,slowmo:0,prime:false,primeAlive:false};
 try{G.best=+(localStorage.getItem("swarm_best")||0);}catch(e){}
 try{G.muted=localStorage.getItem("swarm_mute")==="1";}catch(e){}
+try{G.diff=Math.max(0,Math.min(2,+(localStorage.getItem("swarm_diff")??1)));}catch(e){}
+const DIFFS=[{name:"EASY",spd:0.82,cnt:0.8,dmg:0.7,fire:0.5},
+  {name:"NORMAL",spd:1,cnt:1,dmg:1,fire:1},
+  {name:"HARD",spd:1.28,cnt:1.35,dmg:1.4,fire:1.7}];
+function D(){return DIFFS[G.diff];}
+function gdt(dt){if(G.slowmo>0){G.slowmo-=dt;return dt*0.35;}return dt;}
 const HEAD=[0,1.6,0]; // player head (approx; overwritten by real VR pose for collision)
 
 function reset(){G.score=0;G.wave=0;G.hp=100;G.mult=1;G.combo=0;G.drones.length=0;
-  G.bolts.length=0;G.parts.length=0;G.pickups.length=0;G.heat=0;G.oh=false;G.rapidT=0;G.pending=null;
+  G.bolts.length=0;G.ebolts.length=0;G.parts.length=0;G.pickups.length=0;G.heat=0;G.oh=false;G.rapidT=0;
+  G.pending=null;G.slowmo=0;G.primeAlive=false;
   document.getElementById("initials").style.display="none";showOverheat(false);
   document.getElementById("rapid").style.opacity="0";
   G.mode="play";nextWave();syncHUD();}
-function nextWave(){G.wave++;G.boss=(G.wave%5===0);G.bossPending=G.boss;
-  G.toSpawn=G.boss?(3+G.wave):(3+G.wave*2);G.spawnT=0;SFX.wave();
-  banner(G.boss?"⚠ OVERLORD CORE":"WAVE "+G.wave);}
+function nextWave(){G.wave++;G.prime=(G.wave%10===0);G.boss=(G.wave%5===0);G.bossPending=G.boss;
+  const base=G.boss?(3+G.wave):(3+G.wave*2);G.toSpawn=Math.max(1,Math.round(base*D().cnt));
+  G.spawnT=0;SFX.wave();
+  banner(G.prime?"☢ OVERLORD PRIME":G.boss?"⚠ OVERLORD CORE":"WAVE "+G.wave);}
 function spawnDrone(boss){
   const a=Math.random()*Math.PI*2,el=(Math.random()*0.5+0.1),r=16+Math.random()*4;
   const p=[Math.cos(a)*r,HEAD[1]+Math.sin(el)*6-1.2+Math.random()*2,Math.sin(a)*r];
-  if(boss){G.drones.push({p,spd:0.65+G.wave*0.04,hp:6+G.wave,spin:0,rs:2.6,boss:true,col:[.72,.35,1]});return;}
-  const spd=1.1+G.wave*0.14+Math.random()*0.5;
+  if(boss){const prime=G.prime;if(prime)G.primeAlive=true;
+    G.drones.push({p,spd:(prime?0.5:0.65)+G.wave*0.03,hp:(prime?28:6)+G.wave*(prime?2:1),spin:0,
+      rs:prime?4.2:2.6,boss:true,prime,shooter:true,fireT:1.2,col:prime?[1,.3,.5]:[.72,.35,1]});return;}
+  const spd=(1.1+G.wave*0.14+Math.random()*0.5)*D().spd;
   const strafe=G.wave>=3&&Math.random()<0.35;
+  const shooter=G.wave>=4&&Math.random()<0.28;
   G.drones.push({p,spd,hp:1,spin:Math.random()*6,rs:1+Math.random()*0.6,strafe,ph:Math.random()*6.28,
-    col:strafe?[.2,1,.7]:(Math.random()<0.22?[1,.82,.25]:[1,.18,.42])});
+    shooter,fireT:1.5+Math.random(),
+    col:shooter?[1,.5,0]:strafe?[.2,1,.7]:(Math.random()<0.22?[1,.82,.25]:[1,.18,.42])});
 }
+function efire(d){let dx=HEAD[0]-d.p[0],dy=HEAD[1]-d.p[1],dz=HEAD[2]-d.p[2];const L=Math.hypot(dx,dy,dz)||1;
+  const shots=d.prime?5:d.boss?3:1;
+  for(let k=0;k<shots;k++){let ox=dx/L,oy=dy/L,oz=dz/L;
+    if(shots>1){ox+=(Math.random()*2-1)*0.13;oy+=(Math.random()*2-1)*0.13;oz+=(Math.random()*2-1)*0.13;}
+    G.ebolts.push({p:[d.p[0],d.p[1],d.p[2]],d:[ox,oy,oz],life:3.5});}
+  blip(300,120,.12,"square",.09);}
 function spark(p,col){for(let i=0;i<(reduce?2:4);i++){G.parts.push({p:[p[0],p[1],p[2]],
   v:[(Math.random()*2-1)*2,(Math.random()*2-1)*2,(Math.random()*2-1)*2],life:.22+Math.random()*.2,col});}}
+function scoreBurst(p,col){for(let i=0;i<(reduce?0:6);i++){G.parts.push({p:[p[0],p[1]+0.2,p[2]],
+  v:[(Math.random()*2-1)*1.2,1.6+Math.random()*1.4,(Math.random()*2-1)*1.2],life:.5+Math.random()*.3,col,flash:true});}}
+function pulseScore(){const s=document.getElementById("score");if(!s)return;
+  s.classList.remove("pulse");void s.offsetWidth;s.classList.add("pulse");}
 function fire(origin,dir){
   if(G.mode!=="play")return;
   if(G.oh){SFX.clunk();return;}
@@ -452,13 +489,19 @@ function collideBolts(){
       if(dx*dx+dy*dy+dz*dz< (d.rs*0.6+0.4)*(d.rs*0.6+0.4)){
         hit=true;d.hp--;
         if(d.hp>0){spark(b.p,d.col);break;}
-        explode(d.p,d.col);if(d.boss)explode(d.p,d.col);hapticAll(d.boss?1:.6,d.boss?100:50);maybeDrop(d);G.drones.splice(j,1);
+        explode(d.p,d.col);if(d.boss){explode(d.p,d.col);if(d.prime){explode(d.p,d.col);explode(d.p,d.col);}}
+        hapticAll(d.boss?1:.6,d.boss?100:50);maybeDrop(d);if(d.prime)G.primeAlive=false;
+        scoreBurst(d.p,d.col);G.drones.splice(j,1);
         G.combo++;G.mult=1+Math.floor(G.combo/4);
-        G.score+=(d.boss?150:10)*G.mult;G.comboT=1.2;syncHUD();
+        G.score+=(d.prime?500:d.boss?150:10)*G.mult;G.comboT=1.2;syncHUD();pulseScore();
+        if(G.drones.length===0&&G.toSpawn===0&&!reduce)G.slowmo=0.6;
         const cc=document.getElementById("combo");
         cc.textContent="x"+G.mult;cc.style.opacity=G.mult>1?"1":"0";
         break;}
     }
+    if(!hit)for(let j=G.ebolts.length-1;j>=0;j--){const e=G.ebolts[j];
+      const ex=e.p[0]-b.p[0],ey=e.p[1]-b.p[1],ez=e.p[2]-b.p[2];
+      if(ex*ex+ey*ey+ez*ez<0.5*0.5){spark(e.p,[1,.4,.4]);G.ebolts.splice(j,1);hit=true;break;}}
     if(hit)G.bolts.splice(i,1);
   }
 }
@@ -483,15 +526,22 @@ function update(dt,head){
   for(let i=G.drones.length-1;i>=0;i--){const d=G.drones[i];d.spin+=dt*2.5;
     let dx=HEAD[0]-d.p[0],dy=HEAD[1]-d.p[1],dz=HEAD[2]-d.p[2];
     const L=Math.hypot(dx,dy,dz)||1;const st=d.spd*dt;
-    d.p[0]+=dx/L*st;d.p[1]+=dy/L*st;d.p[2]+=dz/L*st;
+    if(!d.shooter||L>(d.boss?9:6)){d.p[0]+=dx/L*st;d.p[1]+=dy/L*st;d.p[2]+=dz/L*st;}
     if(d.strafe){d.ph+=dt*3;const lx=-dz/L,lz=dx/L,lat=Math.sin(d.ph)*2.6*dt;
       d.p[0]+=lx*lat;d.p[2]+=lz*lat;}
-    if(L<(d.boss?1.6:0.9)){G.drones.splice(i,1);hitPlayer(d.boss?40:16);}
+    if(d.shooter){d.fireT-=dt;if(d.fireT<=0&&L<22){efire(d);d.fireT=(d.prime?1.0:d.boss?1.7:2.4)/D().fire;}}
+    if(L<(d.boss?1.6:0.9)){G.drones.splice(i,1);if(d.prime)G.primeAlive=false;hitPlayer((d.boss?40:16)*D().dmg);}
   }
   // bolts
   for(let i=G.bolts.length-1;i>=0;i--){const b=G.bolts[i];b.life-=dt;
     const s=26*dt;b.p[0]+=b.d[0]*s;b.p[1]+=b.d[1]*s;b.p[2]+=b.d[2]*s;
     if(b.life<=0)G.bolts.splice(i,1);}
+  // enemy bolts (slow, dodgeable, and shootable)
+  for(let i=G.ebolts.length-1;i>=0;i--){const b=G.ebolts[i];b.life-=dt;
+    const s=7*dt;b.p[0]+=b.d[0]*s;b.p[1]+=b.d[1]*s;b.p[2]+=b.d[2]*s;
+    const ex=HEAD[0]-b.p[0],ey=HEAD[1]-b.p[1],ez=HEAD[2]-b.p[2];
+    if(ex*ex+ey*ey+ez*ez<0.42*0.42){G.ebolts.splice(i,1);hitPlayer(10*D().dmg);continue;}
+    if(b.life<=0)G.ebolts.splice(i,1);}
   collideBolts();
   // particles
   for(let i=G.parts.length-1;i>=0;i--){const q=G.parts[i];q.life-=dt;
@@ -513,8 +563,10 @@ function renderScene(proj,view,cam){
   // opaque pass
   gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.BLEND);
   // grid
-  M.model(mModel,[0,0,0],1,0,0);setModel(mModel);col([0,.72,.86],1,1);draw(MESH.grid);
-  M.model(mModel,[0,10,0],1,0,0);setModel(mModel);col([.05,.28,.4],1,1);draw(MESH.grid); // ceiling rib
+  const gpulse=0.62+0.38*Math.abs(Math.sin(G.t*1.4));
+  const gc=G.primeAlive?[0.95*gpulse,0.1,0.2]:[0,.72*gpulse,.86*gpulse];
+  M.model(mModel,[0,0,0],1,0,0);setModel(mModel);col(gc,1,1);draw(MESH.grid);
+  M.model(mModel,[0,10,0],1,0,0);setModel(mModel);col(G.primeAlive?[.35,.05,.1]:[.05,.28,.4],1,1);draw(MESH.grid); // ceiling rib
   // drones
   for(const d of G.drones){M.model(mModel,d.p,d.rs*0.6,d.spin,d.spin*0.5);setModel(mModel);
     col(d.col,0,1);draw(MESH.octa);}
@@ -528,6 +580,8 @@ function renderScene(proj,view,cam){
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);gl.depthMask(false);
   for(const b of G.bolts){M.fromDir(mModel,b.p,b.d,0.06,0.5);setModel(mModel);
     col([.3,1,1],1,1);draw(MESH.cube);}
+  for(const b of G.ebolts){M.fromDir(mModel,b.p,b.d,0.09,0.32);setModel(mModel);
+    col([1,.25,.4],1,1);draw(MESH.cube);}
   for(const q of G.parts){const a=Math.max(0,q.life);
     const s=q.flash?(0.28*a+0.05):(0.09*a+0.02);
     M.model(mModel,q.p,s,q.life*8,0);setModel(mModel);col(q.col,1,q.flash?1:a);draw(MESH.cube);}
@@ -562,7 +616,7 @@ function desktopFrame(t){
   if(xrSession){dLoop=0;return;}
   dLoop=requestAnimationFrame(desktopFrame);
   const dt=Math.min(.05,(t-(desktopFrame.p||t))/1000);desktopFrame.p=t;
-  update(dt,HEAD);updateHudTex();
+  update(gdt(dt),HEAD);updateHudTex();
   const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(2,devicePixelRatio||1);
   if(canvas.width!==w*dpr||canvas.height!==h*dpr){canvas.width=w*dpr;canvas.height=h*dpr;}
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
@@ -635,7 +689,7 @@ function onXRFrame(t,frame){
   for(const src of s.inputSources){if(src.targetRaySpace&&ci<2){
     const p=frame.getPose(src.targetRaySpace,xrRef);if(p)controllers[ci].m=p.transform.matrix;ci++;}}
   let head=HEAD;if(pose){const pos=pose.transform.position;head=[pos.x,pos.y,pos.z];}
-  update(dt,head);updateHudTex();
+  update(gdt(dt),head);updateHudTex();
   gl.bindFramebuffer(gl.FRAMEBUFFER,xrLayer.framebuffer);
   gl.clearColor(.02,.03,.055,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   if(pose)for(const v of pose.views){const vp=xrLayer.getViewport(v);
@@ -658,6 +712,10 @@ function banner(txt){const b=document.getElementById("banner");b.textContent=txt
 
 document.getElementById("btnDesk").addEventListener("click",startDesktop);
 document.getElementById("btnVR").addEventListener("click",startVR);
+function setDiff(d){G.diff=d;try{localStorage.setItem("swarm_diff",d);}catch(e){}
+  document.querySelectorAll(".db").forEach(b=>b.classList.toggle("sel",+b.dataset.d===d));}
+document.querySelectorAll(".db").forEach(b=>b.addEventListener("click",()=>setDiff(+b.dataset.d)));
+setDiff(G.diff);
 document.getElementById("mute").addEventListener("click",()=>setMute(!G.muted));
 addEventListener("keydown",e=>{if(e.key==="m"||e.key==="M")setMute(!G.muted);});
 document.getElementById("ini").addEventListener("keydown",async e=>{
