@@ -98,6 +98,8 @@
   .heatfill.hot{background:linear-gradient(90deg,var(--amber),var(--magenta))}
   #mute{position:fixed;top:14px;right:20px;z-index:9;pointer-events:auto;background:transparent;
     color:var(--cyan);box-shadow:inset 0 0 0 1px #1b5563;padding:6px 10px;font-size:12px;display:none}
+  #wire{position:fixed;top:14px;right:118px;z-index:9;pointer-events:auto;background:transparent;
+    color:var(--violet);box-shadow:inset 0 0 0 1px #3a2a55;padding:6px 10px;font-size:12px;display:none}
   #rapid{position:fixed;left:50%;top:63%;transform:translateX(-50%);z-index:6;color:var(--cyan);
     font-weight:800;letter-spacing:.3em;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;
     text-shadow:0 0 14px var(--cyan)}
@@ -135,6 +137,7 @@
 <div id="overheat">OVERHEAT &mdash; VENTING</div>
 <div id="rapid">RAPID FIRE</div>
 <button id="mute" aria-label="Toggle music">&#9834; ON</button>
+<button id="wire" aria-label="Toggle cyber wireframe">&#9638; CYBER</button>
 
 <div id="hud" aria-hidden="true">
   <div class="row tl"><span class="lab">Score</span><span class="val" id="score">0</span>
@@ -245,7 +248,7 @@ float rim=pow(1.0-max(dot(N,V),0.0),2.0);
 vec3 col=base*(0.4+0.6*diff)+base*rim*1.3;
 col=mix(col,base,uEmit);
 float d=length(uCam-vW);float f=clamp((d-7.0)/45.0,0.0,1.0);
-col=mix(col,vec3(0.018,0.028,0.05),f);
+col=mix(col,vec3(0.006,0.004,0.018),f);
 gl_FragColor=vec4(col,uAlpha*ta);}`;
 
 function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);
@@ -301,7 +304,11 @@ function grid(){const p=[],half=22,step=2;
 function quad(){return mesh([-1,-1,0,1,-1,0,1,1,0,-1,1,0],[0,0,1,0,0,1,0,0,1,0,0,1],
   [0,1,1,1,1,0,0,0],[0,1,2,0,2,3]);}
 
-const MESH={cube:cube(),octa:octa(),grid:grid(),quad:quad()};
+function octaWire(){const v=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const E=[[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[2,5],[3,4],[3,5]];
+  const p=[];for(const[a,b]of E){p.push(v[a][0],v[a][1],v[a][2],v[b][0],v[b][1],v[b][2]);}
+  return mesh(p,p,null,null,gl.LINES);}
+const MESH={cube:cube(),octa:octa(),octaWire:octaWire(),grid:grid(),quad:quad()};
 
 /* ---------- HUD texture (for VR world-panel) ---------- */
 const hudCan=document.createElement("canvas");hudCan.width=512;hudCan.height=200;
@@ -352,19 +359,32 @@ const SFX={shoot:()=>blip(720,180,.12,"square",.14),boom:()=>{noise(.28,.3);blip
 /* ---------- background music (synth loop) ---------- */
 const MUSIC={on:false,step:0,g:null,timer:null};
 function musicStart(){if(!AC||MUSIC.on)return;MUSIC.on=true;
-  MUSIC.g=AC.createGain();MUSIC.g.gain.value=G.muted?0:0.1;MUSIC.g.connect(AC.destination);
-  const scale=[0,3,5,7,10,12],root=110;
-  MUSIC.timer=setInterval(()=>{if(!AC||!MUSIC.g)return;const t=AC.currentTime,s=MUSIC.step++;
-    if(s%2===0){const o=AC.createOscillator(),g=AC.createGain();o.type="sawtooth";
-      o.frequency.value=root*Math.pow(2,(s%8<4?0:5)/12)/2;
-      g.gain.setValueAtTime(.5,t);g.gain.exponentialRampToValueAtTime(.001,t+.34);
-      o.connect(g);g.connect(MUSIC.g);o.start(t);o.stop(t+.35);}
-    const n=scale[(s*3)%scale.length],o2=AC.createOscillator(),g2=AC.createGain();
-    o2.type="triangle";o2.frequency.value=root*2*Math.pow(2,n/12);
-    g2.gain.setValueAtTime(.26,t);g2.gain.exponentialRampToValueAtTime(.001,t+.2);
-    o2.connect(g2);g2.connect(MUSIC.g);o2.start(t);o2.stop(t+.21);},200);}
+  MUSIC.g=AC.createGain();MUSIC.g.gain.value=G.muted?0:0.16;MUSIC.g.connect(AC.destination);
+  // distortion chain for the DOOM chug
+  const dist=AC.createWaveShaper(),cur=new Float32Array(1024);
+  for(let i=0;i<1024;i++){const x=i/512-1;cur[i]=Math.tanh(x*5);}dist.curve=cur;dist.oversample="4x";
+  const dg=AC.createGain();dg.gain.value=0.55;dist.connect(dg);dg.connect(MUSIC.g);MUSIC.dist=dist;
+  const root=55; // low chug fundamental — heavy through the distortion
+  const kk=[1,0,0,1,1,0,0,1,1,0,1,0,1,0,1,1];    // pounding double-kick
+  const riff=[0,0,0,1,0,0,0,0,0,0,1,0,0,6,0,3];  // phrygian menace: b2 + tritone chugs
+  MUSIC.timer=setInterval(()=>{if(!AC||!MUSIC.g)return;const t=AC.currentTime,s=MUSIC.step++,st=s%16;
+    if(kk[st]){const o=AC.createOscillator(),g=AC.createGain();o.type="sine";
+      o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(45,t+0.09);
+      g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.13);
+      o.connect(g);g.connect(MUSIC.g);o.start(t);o.stop(t+0.14);}
+    const o=AC.createOscillator(),g=AC.createGain();o.type="sawtooth";
+    o.frequency.value=root*Math.pow(2,riff[st]/12);
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.6,t+0.004);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.075);
+    o.connect(g);g.connect(MUSIC.dist);o.start(t);o.stop(t+0.085);
+    if(st%4===0)G.beat=1;
+    if(s%32===16||s%32===22||s%32===26){const lead=[12,15,13,18],o2=AC.createOscillator(),g2=AC.createGain();
+      o2.type="square";o2.frequency.value=root*4*Math.pow(2,lead[(s>>1)%4]/12);
+      g2.gain.setValueAtTime(0.15,t);g2.gain.exponentialRampToValueAtTime(0.001,t+0.16);
+      o2.connect(g2);g2.connect(MUSIC.g);o2.start(t);o2.stop(t+0.17);}
+  },105);}
 function setMute(m){G.muted=m;try{localStorage.setItem("swarm_mute",m?"1":"0");}catch(e){}
-  if(MUSIC.g)MUSIC.g.gain.value=m?0:0.1;
+  if(MUSIC.g)MUSIC.g.gain.value=m?0:0.16;
   const b=document.getElementById("mute");if(b)b.innerHTML=(m?"&#9834; OFF":"&#9834; ON");}
 
 /* ---------- pickups + overheat helpers ---------- */
@@ -394,10 +414,11 @@ async function renderBoard(){const list=document.getElementById("lblist");if(!li
 /* ---------- game state ---------- */
 const G={mode:"menu",score:0,wave:0,hp:100,mult:1,combo:0,comboT:0,
   drones:[],bolts:[],ebolts:[],parts:[],pickups:[],toSpawn:0,spawnT:0,alive:0,shake:0,t:0,best:0,boss:false,bossPending:false,
-  heat:0,oh:false,rapidT:0,muted:false,pending:null,diff:1,slowmo:0,prime:false,primeAlive:false,charging:false,charge:0};
+  heat:0,oh:false,rapidT:0,muted:false,pending:null,diff:1,slowmo:0,prime:false,primeAlive:false,charging:false,charge:0,wire:true,beat:0};
 try{G.best=+(localStorage.getItem("swarm_best")||0);}catch(e){}
 try{G.muted=localStorage.getItem("swarm_mute")==="1";}catch(e){}
 try{G.diff=Math.max(0,Math.min(2,+(localStorage.getItem("swarm_diff")??1)));}catch(e){}
+try{G.wire=localStorage.getItem("swarm_wire")!=="0";}catch(e){}
 const DIFFS=[{name:"EASY",spd:0.82,cnt:0.8,dmg:0.7,fire:0.5},
   {name:"NORMAL",spd:1,cnt:1,dmg:1,fire:1},
   {name:"HARD",spd:1.28,cnt:1.35,dmg:1.4,fire:1.7}];
@@ -471,10 +492,10 @@ function updateChargeUI(){const x=document.getElementById("xhair");if(!x)return;
   const c=G.charging?G.charge:0;x.style.transform="translate(-50%,-50%) scale("+(1+c*1.8)+")";
   x.classList.toggle("charged",c>=0.35);}
 function explode(p,col){
-  const n=reduce?5:12;
+  const n=reduce?6:18;
   for(let i=0;i<n;i++){G.parts.push({p:[p[0],p[1],p[2]],
-    v:[(Math.random()*2-1)*3,(Math.random()*2-1)*3,(Math.random()*2-1)*3],
-    life:.5+Math.random()*.4,col});}
+    v:[(Math.random()*2-1)*4,(Math.random()*2-1)*4,(Math.random()*2-1)*4],
+    life:.5+Math.random()*.5,col,flash:Math.random()<0.4});}
   SFX.boom();
 }
 function hitPlayer(dmg){
@@ -532,6 +553,7 @@ function update(dt,head){
   if(G.oh&&G.heat<40){G.oh=false;showOverheat(false);}
   if(G.rapidT>0){G.rapidT-=dt;if(G.rapidT<=0){const r=document.getElementById("rapid");if(r)r.style.opacity="0";}}
   if(G.charging){G.charge=Math.min(1,G.charge+dt/1.1);updateChargeUI();}
+  if(G.beat>0)G.beat=Math.max(0,G.beat-dt*4);
   const hf=document.getElementById("heatfill");
   if(hf){hf.style.width=G.heat+"%";hf.className="heatfill"+(G.oh||G.heat>75?" hot":"");}
   for(let i=G.pickups.length-1;i>=0;i--){const k=G.pickups[i];k.spin+=dt*2;k.life-=dt;
@@ -584,15 +606,18 @@ function renderScene(proj,view,cam){
   // opaque pass
   gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.BLEND);
   // grid
-  const gpulse=0.62+0.38*Math.abs(Math.sin(G.t*1.4));
-  const gc=G.primeAlive?[0.95*gpulse,0.1,0.2]:[0,.72*gpulse,.86*gpulse];
+  const gpulse=0.5+0.5*G.beat+0.14*Math.abs(Math.sin(G.t*1.2));
+  const gc=G.primeAlive?[1.1*gpulse,0.12,0.3]:[0.12*gpulse,.98*gpulse,1.12*gpulse];
   M.model(mModel,[0,0,0],1,0,0);setModel(mModel);col(gc,1,1);draw(MESH.grid);
-  M.model(mModel,[0,10,0],1,0,0);setModel(mModel);col(G.primeAlive?[.35,.05,.1]:[.05,.28,.4],1,1);draw(MESH.grid); // ceiling rib
+  M.model(mModel,[0,10,0],1,0,0);setModel(mModel);col(G.primeAlive?[.45,.06,.16]:[.08,.34,.52],1,1);draw(MESH.grid); // ceiling rib
   // drones
   for(const d of G.drones){M.model(mModel,d.p,d.rs*0.6,d.spin,d.spin*0.5);setModel(mModel);
-    col(d.col,0,1);draw(MESH.octa);}
+    if(G.wire){col([d.col[0]*.12,d.col[1]*.12,d.col[2]*.12],1,1);draw(MESH.octa);
+      col([Math.min(1,d.col[0]*1.5),Math.min(1,d.col[1]*1.5),Math.min(1,d.col[2]*1.5)],1,1);draw(MESH.octaWire);}
+    else{col(d.col,0,1);draw(MESH.octa);}}
   for(const k of G.pickups){M.model(mModel,k.p,0.26,k.spin,k.spin*0.7);setModel(mModel);
-    col(k.col,0,1);draw(MESH.octa);}
+    if(G.wire){col([k.col[0]*.15,k.col[1]*.15,k.col[2]*.15],1,1);draw(MESH.octa);col(k.col,1,1);draw(MESH.octaWire);}
+    else{col(k.col,0,1);draw(MESH.octa);}}
   // controller guns
   for(const c of controllers){if(!c.m)continue;
     M.mul(mModel,c.m,gunLocal);setModel(mModel);col([.5,.95,1],0,1);draw(MESH.cube);
@@ -641,7 +666,7 @@ function desktopFrame(t){
   const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(2,devicePixelRatio||1);
   if(canvas.width!==w*dpr||canvas.height!==h*dpr){canvas.width=w*dpr;canvas.height=h*dpr;}
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
-  gl.clearColor(.02,.03,.055,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.clearColor(.007,.005,.02,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   M.perspective(mProj,70*Math.PI/180,canvas.width/canvas.height,.1,220);
   desktopView(mView);
   renderScene(mProj,mView,HEAD);
@@ -651,6 +676,7 @@ function startDesktop(){
   document.getElementById("hud").style.display="block";
   document.getElementById("xhair").style.display="block";
   initAudio();musicStart();document.getElementById("mute").style.display="block";
+  document.getElementById("wire").style.display="block";
   reset();if(!touch)canvas.requestPointerLock&&canvas.requestPointerLock();
   desktopFrame.p=0;if(!dLoop)desktopFrame(performance.now());
 }
@@ -693,6 +719,7 @@ async function startVR(){
     xrSession.addEventListener("selectend",onSelectEnd);
     document.getElementById("menu").style.display="none";
     musicStart();document.getElementById("mute").style.display="block";
+    document.getElementById("wire").style.display="block";
     reset();
     xrSession.requestAnimationFrame(onXRFrame);
   }catch(e){document.getElementById("vrNote").textContent="Could not start VR: "+e.message;}
@@ -721,7 +748,7 @@ function onXRFrame(t,frame){
   let head=HEAD;if(pose){const pos=pose.transform.position;head=[pos.x,pos.y,pos.z];}
   update(gdt(dt),head);updateHudTex();
   gl.bindFramebuffer(gl.FRAMEBUFFER,xrLayer.framebuffer);
-  gl.clearColor(.02,.03,.055,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.clearColor(.007,.005,.02,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   if(pose)for(const v of pose.views){const vp=xrLayer.getViewport(v);
     gl.viewport(vp.x,vp.y,vp.width,vp.height);
     renderScene(v.projectionMatrix,v.transform.inverse.matrix,
@@ -746,6 +773,10 @@ function setDiff(d){G.diff=d;try{localStorage.setItem("swarm_diff",d);}catch(e){
   document.querySelectorAll(".db").forEach(b=>b.classList.toggle("sel",+b.dataset.d===d));}
 document.querySelectorAll(".db").forEach(b=>b.addEventListener("click",()=>setDiff(+b.dataset.d)));
 setDiff(G.diff);
+function setWire(w){G.wire=w;try{localStorage.setItem("swarm_wire",w?"1":"0");}catch(e){}
+  const b=document.getElementById("wire");if(b)b.innerHTML=w?"&#9638; CYBER":"&#9638; SOLID";}
+document.getElementById("wire").addEventListener("click",()=>setWire(!G.wire));
+setWire(G.wire);
 document.getElementById("mute").addEventListener("click",()=>setMute(!G.muted));
 addEventListener("keydown",e=>{if(e.key==="m"||e.key==="M")setMute(!G.muted);});
 document.getElementById("ini").addEventListener("keydown",async e=>{
