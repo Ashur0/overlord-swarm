@@ -145,7 +145,7 @@
       Point, fire, don't let them reach you.</p>
     <div class="rules">
       <div><span class="k">VR</span> <b>Trigger</b> to fire &mdash; aim with either controller.</div>
-      <div><span class="k">Desktop</span> <b>Move mouse</b> to aim &mdash; <b>click</b> to fire.</div>
+      <div><span class="k">Screen</span> <b>Mouse or drag</b> to aim &mdash; <b>click / tap</b> to fire.</div>
       <div><span class="k">Combo</span> chain hits without missing to multiply score.</div>
       <div><span class="k">Danger</span> every drone that reaches you burns hull. Zero = down.</div>
     </div>
@@ -156,7 +156,7 @@
     <div id="board"><div class="bt">Grid Defenders &mdash; Top Scores</div><div id="lblist"></div></div>
     <div class="btns">
       <button id="btnVR">Enter VR</button>
-      <button id="btnDesk" class="ghost">Play on Desktop</button>
+      <button id="btnDesk" class="ghost">Play in Browser</button>
     </div>
     <div class="note" id="vrNote">Checking headset&hellip;</div>
   </div>
@@ -551,6 +551,7 @@ const controllers=[{m:null},{m:null}];
 
 /* ---------- desktop path ---------- */
 let yaw=0,pitch=0,dLoop=0;
+const touch=matchMedia("(pointer:coarse)").matches||("ontouchstart" in window);
 function desktopView(out){
   const cx=Math.cos(pitch),fx=cx*Math.sin(yaw),fy=Math.sin(pitch),fz=-cx*Math.cos(yaw);
   let sh=0;if(G.shake>0)sh=(Math.random()*2-1)*G.shake*0.06;
@@ -575,18 +576,26 @@ function startDesktop(){
   document.getElementById("hud").style.display="block";
   document.getElementById("xhair").style.display="block";
   initAudio();musicStart();document.getElementById("mute").style.display="block";
-  reset();canvas.requestPointerLock&&canvas.requestPointerLock();
+  reset();if(!touch)canvas.requestPointerLock&&canvas.requestPointerLock();
   desktopFrame.p=0;if(!dLoop)desktopFrame(performance.now());
 }
 canvas.addEventListener("click",()=>{
-  if(xrSession)return;
+  if(xrSession||touch)return;
   if(document.pointerLockElement!==canvas){canvas.requestPointerLock&&canvas.requestPointerLock();return;}
-  if(G.mode==="play"){const f=desktopView(mTmp);
-    fire([HEAD[0],HEAD[1],HEAD[2]],f);G.combo=G.combo;} // fire along view
+  if(G.mode==="play"){const f=desktopView(mTmp);fire([HEAD[0],HEAD[1],HEAD[2]],f);} // fire along view
 });
 addEventListener("mousemove",e=>{if(document.pointerLockElement!==canvas)return;
   yaw+=e.movementX*0.0022;pitch-=e.movementY*0.0022;
   pitch=Math.max(-1.2,Math.min(1.2,pitch));});
+/* touch: drag to aim, tap to fire */
+let _tx=0,_ty=0,_tt=0,_tmv=0;
+canvas.addEventListener("touchstart",e=>{if(xrSession)return;const t=e.changedTouches[0];
+  _tx=t.clientX;_ty=t.clientY;_tt=performance.now();_tmv=0;},{passive:true});
+canvas.addEventListener("touchmove",e=>{if(xrSession)return;const t=e.changedTouches[0];
+  const dx=t.clientX-_tx,dy=t.clientY-_ty;_tx=t.clientX;_ty=t.clientY;_tmv+=Math.abs(dx)+Math.abs(dy);
+  yaw+=dx*0.005;pitch-=dy*0.005;pitch=Math.max(-1.2,Math.min(1.2,pitch));},{passive:true});
+canvas.addEventListener("touchend",()=>{if(xrSession||G.mode!=="play")return;
+  if(performance.now()-_tt<260&&_tmv<14){const f=desktopView(mTmp);fire([HEAD[0],HEAD[1],HEAD[2]],f);}},{passive:true});
 
 /* ---------- VR path ---------- */
 let xrSession=null,xrRef=null,xrLayer=null,glR=null,xrInputs=[];
@@ -663,8 +672,8 @@ setMute(G.muted);renderBoard();
   if(navigator.xr&&await navigator.xr.isSessionSupported("immersive-vr").catch(()=>false)){
     note.innerHTML="Headset detected &mdash; put it on and hit <b style='color:var(--cyan)'>Enter VR</b>.";
   }else{btn.disabled=true;
-    note.innerHTML="No VR headset here &mdash; <b style='color:var(--cyan)'>Play on Desktop</b>. "+
-      "(Open this page in a Quest browser to play in VR.)";}
+    note.innerHTML="No VR headset here &mdash; <b style='color:var(--cyan)'>Play in Browser</b>. "+
+      "(Open this link in a Meta Quest browser to play in VR.)";}
 })();
 addEventListener("resize",()=>{});
 </script>
