@@ -170,6 +170,7 @@
         <button class="db" data-d="2">Hard</button>
       </div>
     </div>
+    <div id="invrow" style="margin-bottom:18px"><button id="invy" class="db">Invert Y &mdash; Off</button></div>
     <div class="rules">
       <div><span class="k">VR</span> <b>Trigger</b> to fire &mdash; <b>hold</b> to charge a piercing blast.</div>
       <div><span class="k">Screen</span> <b>Drag/mouse</b> to aim, <b>tap/click</b> to fire, <b>hold</b> to charge.</div>
@@ -463,11 +464,12 @@ async function renderBoard(){const list=document.getElementById("lblist");if(!li
 /* ---------- game state ---------- */
 const G={mode:"menu",score:0,wave:0,hp:100,mult:1,combo:0,comboT:0,
   drones:[],bolts:[],ebolts:[],parts:[],pickups:[],toSpawn:0,spawnT:0,alive:0,shake:0,t:0,best:0,boss:false,bossPending:false,
-  heat:0,oh:false,rapidT:0,muted:false,pending:null,diff:1,slowmo:0,prime:false,primeAlive:false,charging:false,charge:0,wire:true,beat:0,avatar:false,avatarAlive:false};
+  heat:0,oh:false,rapidT:0,muted:false,pending:null,diff:1,slowmo:0,prime:false,primeAlive:false,charging:false,charge:0,wire:true,beat:0,avatar:false,avatarAlive:false,invY:false};
 try{G.best=+(localStorage.getItem("swarm_best")||0);}catch(e){}
 try{G.muted=localStorage.getItem("swarm_mute")==="1";}catch(e){}
 try{G.diff=Math.max(0,Math.min(2,+(localStorage.getItem("swarm_diff")??1)));}catch(e){}
 try{G.wire=localStorage.getItem("swarm_wire")!=="0";}catch(e){}
+try{G.invY=localStorage.getItem("swarm_invy")==="1";}catch(e){}
 const DIFFS=[{name:"EASY",spd:0.82,cnt:0.8,dmg:0.7,fire:0.5},
   {name:"NORMAL",spd:1,cnt:1,dmg:1,fire:1},
   {name:"HARD",spd:1.28,cnt:1.35,dmg:1.4,fire:1.7}];
@@ -777,7 +779,7 @@ canvas.addEventListener("mousedown",()=>{
 addEventListener("mouseup",()=>{if(xrSession||touch||document.pointerLockElement!==canvas)return;
   const f=desktopView(mTmp);releaseCharge([HEAD[0],HEAD[1],HEAD[2]],f);});
 addEventListener("mousemove",e=>{if(document.pointerLockElement!==canvas)return;
-  yaw+=e.movementX*0.0022;pitch-=e.movementY*0.0022;
+  yaw+=e.movementX*0.0022;pitch+=e.movementY*0.0022*(G.invY?1:-1);
   pitch=Math.max(-1.2,Math.min(1.2,pitch));});
 /* touch: drag to aim, tap to fire */
 let _tx=0,_ty=0,_tt=0,_tmv=0;
@@ -785,7 +787,7 @@ canvas.addEventListener("touchstart",e=>{if(xrSession)return;const t=e.changedTo
   _tx=t.clientX;_ty=t.clientY;_tt=performance.now();_tmv=0;startCharge();},{passive:true});
 canvas.addEventListener("touchmove",e=>{if(xrSession)return;const t=e.changedTouches[0];
   const dx=t.clientX-_tx,dy=t.clientY-_ty;_tx=t.clientX;_ty=t.clientY;_tmv+=Math.abs(dx)+Math.abs(dy);
-  yaw+=dx*0.005;pitch-=dy*0.005;pitch=Math.max(-1.2,Math.min(1.2,pitch));},{passive:true});
+  yaw+=dx*0.005;pitch+=dy*0.005*(G.invY?1:-1);pitch=Math.max(-1.2,Math.min(1.2,pitch));},{passive:true});
 canvas.addEventListener("touchend",()=>{if(xrSession)return;
   const f=desktopView(mTmp);releaseCharge([HEAD[0],HEAD[1],HEAD[2]],f);},{passive:true});
 
@@ -866,6 +868,10 @@ function setWire(w){G.wire=w;try{localStorage.setItem("swarm_wire",w?"1":"0");}c
   const b=document.getElementById("wire");if(b)b.innerHTML=w?"&#9638; CYBER":"&#9638; SOLID";}
 document.getElementById("wire").addEventListener("click",()=>setWire(!G.wire));
 setWire(G.wire);
+function setInvY(v){G.invY=v;try{localStorage.setItem("swarm_invy",v?"1":"0");}catch(e){}
+  const b=document.getElementById("invy");if(b){b.innerHTML="Invert Y &mdash; "+(v?"On":"Off");b.classList.toggle("sel",v);}}
+document.getElementById("invy").addEventListener("click",()=>setInvY(!G.invY));
+setInvY(G.invY);
 document.getElementById("mute").addEventListener("click",()=>setMute(!G.muted));
 addEventListener("keydown",e=>{if(e.key==="m"||e.key==="M")setMute(!G.muted);});
 document.getElementById("ini").addEventListener("keydown",async e=>{
