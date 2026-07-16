@@ -29,6 +29,9 @@
     font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
     -webkit-user-select:none;user-select:none;touch-action:none}
   #gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #scan{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:.55;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,0),rgba(0,0,0,0) 2px,rgba(0,24,34,.16) 3px,rgba(0,0,0,0) 4px),
+      radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(2,4,10,.42) 100%)}
 
   .overlay{position:fixed;inset:0;display:flex;justify-content:center;overflow-y:auto;
     padding:24px;text-align:center;z-index:10}
@@ -147,6 +150,7 @@
 </style>
 
 <canvas id="gl"></canvas>
+<div id="scan"></div>
 
 <div id="xhair"></div>
 <div id="flash"></div>
@@ -394,7 +398,13 @@ function octaWire(){const v=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]
   const E=[[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[2,5],[3,4],[3,5]];
   const p=[];for(const[a,b]of E){p.push(v[a][0],v[a][1],v[a][2],v[b][0],v[b][1],v[b][2]);}
   return mesh(p,p,null,null,gl.LINES);}
-const MESH={cube:cube(),octa:octa(),octaWire:octaWire(),grid:grid(),quad:quad()};
+function cubeWire(){const v=[[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1],[-1,1,-1],[1,1,-1],[1,1,1],[-1,1,1]];
+  const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  const p=[];for(const[a,b]of E){p.push(v[a][0],v[a][1],v[a][2],v[b][0],v[b][1],v[b][2]);}return mesh(p,p,null,null,gl.LINES);}
+const MESH={cube:cube(),octa:octa(),octaWire:octaWire(),cubeWire:cubeWire(),grid:grid(),quad:quad()};
+/* deckers.die atmosphere: falling data-rain + distant wireframe monoliths */
+const RAIN=[];for(let i=0;i<(reduce?0:70);i++)RAIN.push({x:(Math.random()*2-1)*34,z:(Math.random()*2-1)*34,y:Math.random()*16-2,sp:2+Math.random()*4,c:Math.random()<0.5?[0,.9,1]:[1,.2,.6]});
+const TOWERS=[];for(let i=0;i<9;i++){const a=i/9*Math.PI*2;TOWERS.push({x:Math.cos(a)*(30+Math.random()*10),z:Math.sin(a)*(30+Math.random()*10),h:4+Math.random()*11,w:1+Math.random()*2.2});}
 
 /* ---------- HUD texture (for VR world-panel) ---------- */
 const hudCan=document.createElement("canvas");hudCan.width=512;hudCan.height=200;
@@ -672,6 +682,7 @@ function collideBolts(){
 }
 function update(dt,head){
   G.t+=dt;if(head)HEAD[0]=head[0],HEAD[1]=head[1],HEAD[2]=head[2];
+  for(const r of RAIN){r.y-=r.sp*dt;if(r.y<-2){r.y=15+Math.random()*3;r.x=(Math.random()*2-1)*34;r.z=(Math.random()*2-1)*34;}}
   if(G.mode!=="play")return;
   G.heat=Math.max(0,G.heat-(G.oh?45:32)*dt);
   if(G.oh&&G.heat<40){G.oh=false;showOverheat(false);}
@@ -760,6 +771,10 @@ function renderScene(proj,view,cam){
   const gc=G.avatarAlive?[1.0*gpulse,0.15,1.15*gpulse]:G.primeAlive?[1.1*gpulse,0.12,0.3]:[0.12*gpulse,.98*gpulse,1.12*gpulse];
   M.model(mModel,[0,0,0],1,0,0);setModel(mModel);col(gc,1,1);draw(MESH.grid);
   M.model(mModel,[0,10,0],1,0,0);setModel(mModel);col(G.avatarAlive?[.4,.08,.5]:G.primeAlive?[.45,.06,.16]:[.08,.34,.52],1,1);draw(MESH.grid); // ceiling rib
+  // distant wireframe monoliths (the vast deckers.die void)
+  for(const tw of TOWERS){mModel[0]=tw.w;mModel[1]=0;mModel[2]=0;mModel[3]=0;mModel[4]=0;mModel[5]=tw.h;mModel[6]=0;mModel[7]=0;
+    mModel[8]=0;mModel[9]=0;mModel[10]=tw.w;mModel[11]=0;mModel[12]=tw.x;mModel[13]=tw.h-2;mModel[14]=tw.z;mModel[15]=1;
+    setModel(mModel);col([0,.3,.46],1,0.9);draw(MESH.cubeWire);}
   // drones
   for(const d of G.drones){
     if(d.avatar){drawAvatar(d);continue;}
@@ -782,6 +797,7 @@ function renderScene(proj,view,cam){
     col([.3,1,1],1,1);draw(MESH.cube);}
   for(const b of G.ebolts){M.fromDir(mModel,b.p,b.d,0.09,0.32);setModel(mModel);
     col([1,.25,.4],1,1);draw(MESH.cube);}
+  for(const r of RAIN){M.fromDir(mModel,[r.x,r.y,r.z],[0,-1,0],0.018,0.45);setModel(mModel);col(r.c,1,0.45);draw(MESH.cube);}
   for(const q of G.parts){const a=Math.max(0,q.life);
     const s=q.flash?(0.28*a+0.05):(0.09*a+0.02);
     M.model(mModel,q.p,s,q.life*8,0);setModel(mModel);col(q.col,1,q.flash?1:a);draw(MESH.cube);}
