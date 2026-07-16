@@ -220,6 +220,7 @@
     <div class="btns">
       <button id="btnVR">Enter VR</button>
       <button id="btnDesk" class="ghost">Play in Browser</button>
+      <button id="btnShare" class="ghost" style="display:none">Share Run</button>
     </div>
     <div class="note" id="vrNote">Checking headset&hellip;</div>
   </div>
@@ -498,7 +499,23 @@ function musicStart(){if(!AC||MUSIC.on)return;MUSIC.on=true;
   },105);}
 function setMute(m){G.muted=m;try{localStorage.setItem("swarm_mute",m?"1":"0");}catch(e){}
   if(MUSIC.g)MUSIC.g.gain.value=m?0:0.16;
+  if(m&&"speechSynthesis"in window)try{speechSynthesis.cancel();}catch(e){}
   const b=document.getElementById("mute");if(b)b.innerHTML=(m?"&#9834; OFF":"&#9834; ON");}
+/* ---------- OVERLORD-9 villain voice (Web Speech API; swap in ElevenLabs later) ---------- */
+const VOICE={intro:["OVERLORD 9 online. Your grid is mine.","Submit, human. You cannot win."],
+  core:["Delete this pest.","More drones. Always more."],
+  prime:["Witness overload.","You are outmatched."],
+  avatar:["Behold my avatar.","Final form. You will break."],
+  purge:["Insolent!","You only delay the inevitable."],
+  death:["The grid belongs to me.","Game over, human."],
+  win:["...impossible.","You survived? Recalculating."]};
+let VV=null;
+function pickVoice(){try{const vs=speechSynthesis.getVoices();
+  VV=vs.find(v=>/en/i.test(v.lang)&&/male|david|daniel|fred|uk english male/i.test(v.name))||vs.find(v=>/en/i.test(v.lang))||vs[0]||null;}catch(e){}}
+function say(cat){if(G.muted||!("speechSynthesis"in window))return;const arr=VOICE[cat];if(!arr)return;
+  try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(arr[Math.floor(Math.random()*arr.length)]);
+    u.pitch=0.35;u.rate=0.96;u.volume=0.95;if(VV)u.voice=VV;speechSynthesis.speak(u);}catch(e){}}
+if("speechSynthesis"in window){pickVoice();try{speechSynthesis.onvoiceschanged=pickVoice;}catch(e){}}
 
 /* ---------- pickups + overheat helpers ---------- */
 function showOverheat(on){const el=document.getElementById("overheat");if(el)el.style.opacity=on?"1":"0";}
@@ -544,7 +561,7 @@ function purge(){if(G.mode!=="play"||G.ult<1)return;G.ult=0;
   for(let i=G.drones.length-1;i>=0;i--){const d=G.drones[i];
     if(d.boss){d.hp-=20;explode(d.p,d.col);if(d.hp<=0)killDrone(i,d);}
     else{explode(d.p,d.col);G.score+=8*G.mult;G.drones.splice(i,1);}}
-  glitch();flash();G.shake=reduce?0:1;if(!reduce)G.slowmo=0.5;SFX.boom();hapticAll(1,150);syncHUD();banner("SYSTEM PURGE");}
+  glitch();flash();G.shake=reduce?0:1;if(!reduce)G.slowmo=0.5;SFX.boom();hapticAll(1,150);syncHUD();banner("SYSTEM PURGE");say("purge");}
 const HEAD=[0,1.6,0]; // player head (approx; overwritten by real VR pose for collision)
 
 function reset(){G.score=0;G.wave=0;G.hp=100;G.mult=1;G.combo=0;G.drones.length=0;
@@ -555,12 +572,14 @@ function reset(){G.score=0;G.wave=0;G.hp=100;G.mult=1;G.combo=0;G.drones.length=
   document.getElementById("rapid").style.opacity="0";
   const _bb=document.getElementById("bossbar");if(_bb)_bb.style.display="none";
   document.getElementById("shop").style.display="none";
+  document.getElementById("btnShare").style.display="none";
   G.mode="play";nextWave();syncHUD();updateChargeUI();}
 function nextWave(){G.wave++;G.avatar=(G.wave%15===0);G.prime=(!G.avatar&&G.wave%10===0);
   G.boss=(G.wave%5===0);G.bossPending=G.boss;
   const base=G.avatar?4:(G.boss?(3+G.wave):(3+G.wave*2));G.toSpawn=Math.max(1,Math.round(base*D().cnt));
   G.spawnT=0;SFX.wave();
-  banner(G.avatar?"☠ OVERLORD AVATAR — FINAL FORM":G.prime?"☢ OVERLORD PRIME":G.boss?"⚠ OVERLORD CORE":"WAVE "+G.wave);glitch();}
+  banner(G.avatar?"☠ OVERLORD AVATAR — FINAL FORM":G.prime?"☢ OVERLORD PRIME":G.boss?"⚠ OVERLORD CORE":"WAVE "+G.wave);glitch();
+  if(G.avatar)say("avatar");else if(G.prime)say("prime");else if(G.boss)say("core");}
 function spawnDrone(boss){
   const a=Math.random()*Math.PI*2,el=(Math.random()*0.5+0.1),r=16+Math.random()*4;
   const p=[Math.cos(a)*r,HEAD[1]+Math.sin(el)*6-1.2+Math.random()*2,Math.sin(a)*r];
@@ -653,6 +672,8 @@ function gameOver(){G.mode="over";syncHUD();
   if(G.score>0){document.getElementById("initials").style.display="block";
     setTimeout(()=>{const ini=document.getElementById("ini");if(ini){ini.value="";ini.focus();}},60);}
   renderBoard();
+  say(G.won?"win":"death");
+  document.getElementById("btnShare").style.display="inline-block";
   if(xrSession){try{xrSession.end();}catch(e){}}
 }
 const HORDE_MAX=50;
@@ -893,7 +914,7 @@ function startDesktop(){
   document.getElementById("xhair").style.display="block";
   initAudio();musicStart();G.drift=true;document.getElementById("mute").style.display="block";
   document.getElementById("wire").style.display="block";
-  reset();if(!touch)canvas.requestPointerLock&&canvas.requestPointerLock();
+  reset();say("intro");if(!touch)canvas.requestPointerLock&&canvas.requestPointerLock();
   desktopFrame.p=0;if(!dLoop)desktopFrame(performance.now());
 }
 canvas.addEventListener("mousedown",()=>{
@@ -936,7 +957,7 @@ async function startVR(){
     document.getElementById("menu").style.display="none";
     musicStart();G.drift=false;document.getElementById("mute").style.display="block";
     document.getElementById("wire").style.display="block";
-    reset();
+    reset();say("intro");
     xrSession.requestAnimationFrame(onXRFrame);
   }catch(e){document.getElementById("vrNote").textContent="Could not start VR: "+e.message;}
 }
@@ -988,12 +1009,31 @@ function flash(){const el=document.getElementById("flash");el.style.opacity=".5"
 function glitch(){if(reduce)return;const g=document.getElementById("glitch");if(!g)return;
   g.style.transform="translateX("+((Math.random()*2-1)*7)+"px) skewX("+((Math.random()*2-1)*2.5)+"deg)";
   g.style.opacity="0.85";clearTimeout(glitch._t);glitch._t=setTimeout(()=>{g.style.opacity="0";},95);}
+function shareRun(){
+  const c=document.createElement("canvas");c.width=1200;c.height=630;const x=c.getContext("2d");
+  x.fillStyle="#05060a";x.fillRect(0,0,1200,630);
+  x.strokeStyle="rgba(0,240,255,.14)";for(let i=1;i<22;i++){const y=380+i*i*0.55;x.beginPath();x.moveTo(0,y);x.lineTo(1200,y);x.stroke();}
+  x.textAlign="center";
+  x.font="bold 30px ui-monospace,monospace";x.fillStyle="#ff2d6b";x.fillText("G R I D   D E F E N S E   P R O T O C O L",600,140);
+  x.font="bold 78px ui-monospace,monospace";x.fillStyle="#00f0ff";x.fillText("SWARM // OVERLORD-9",600,242);
+  x.font="bold 42px ui-monospace,monospace";x.fillStyle="#d7faff";
+  x.fillText(G.won?"CLEARED ALL 50 WAVES":("Reached Wave "+G.wave+"   ·   Score "+G.score),600,350);
+  x.font="22px ui-monospace,monospace";x.fillStyle="#8fb4bf";x.fillText("play free → ashur0.github.io/overlord-swarm",600,470);
+  const url="https://ashur0.github.io/overlord-swarm/";
+  const txt=(G.won?"I cleared all 50 waves of ":("I reached wave "+G.wave+" in "))+"SWARM // OVERLORD-9 — beat me!";
+  c.toBlob(async(blob)=>{if(!blob)return;const file=new File([blob],"swarm-run.png",{type:"image/png"});
+    try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],text:txt,url});return;}}catch(e){}
+    try{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="swarm-run.png";a.click();}catch(e){}
+    try{await navigator.clipboard.writeText(txt+" "+url);}catch(e){}
+    const bs=document.getElementById("btnShare");if(bs){bs.textContent="Saved ✓ link copied";setTimeout(()=>{bs.textContent="Share Run";},2500);}
+  },"image/png");}
 function banner(txt){const b=document.getElementById("banner");b.textContent=txt;
   b.style.opacity="1";b.style.transition="none";
   requestAnimationFrame(()=>{b.style.transition="opacity .8s ease .5s";b.style.opacity="0";});}
 
 document.getElementById("btnDesk").addEventListener("click",startDesktop);
 document.getElementById("btnVR").addEventListener("click",startVR);
+document.getElementById("btnShare").addEventListener("click",shareRun);
 function setDiff(d){G.diff=d;try{localStorage.setItem("swarm_diff",d);}catch(e){}
   document.querySelectorAll(".db").forEach(b=>b.classList.toggle("sel",+b.dataset.d===d));}
 document.querySelectorAll(".db").forEach(b=>b.addEventListener("click",()=>setDiff(+b.dataset.d)));
