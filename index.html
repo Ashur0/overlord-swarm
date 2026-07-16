@@ -123,6 +123,14 @@
   .dbtns{display:flex;gap:8px}
   .db{background:transparent;color:#8fb4bf;box-shadow:inset 0 0 0 1px #1b5563;padding:9px 16px;font-size:12px}
   .db.sel{background:var(--cyan);color:var(--void);box-shadow:0 0 20px rgba(0,240,255,.4)}
+  #modesel{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:16px}
+  .mb{background:transparent;color:#8fb4bf;box-shadow:inset 0 0 0 1px #1b5563;padding:9px 18px;font-size:12px}
+  .mb.sel{background:var(--violet);color:var(--void);box-shadow:0 0 20px rgba(177,75,255,.4)}
+  .shopgrid{display:grid;gap:10px;margin:0 0 22px}
+  .sbtn{background:transparent;color:var(--cyan);box-shadow:inset 0 0 0 1px #1b5563;padding:12px 14px;
+    font-size:12.5px;letter-spacing:.05em;text-transform:none}
+  .sbtn:hover{box-shadow:inset 0 0 0 1px var(--cyan),0 0 18px rgba(0,240,255,.2)}
+  .sbtn[disabled]{opacity:.3;cursor:not-allowed;filter:grayscale(.4)}
   #score{display:inline-block}
   #score.pulse{animation:scPulse .26s ease}
   @keyframes scPulse{0%{transform:scale(1)}45%{transform:scale(1.32);color:#fff}100%{transform:scale(1)}}
@@ -153,8 +161,10 @@
   <div class="row tc"><span class="lab">Wave</span><span class="val mag" id="wave">1</span></div>
   <div class="row tr"><div class="heatbar"><div class="heatfill" id="heatfill"></div></div>
     <div class="hplab" style="margin-top:2px">Weapon Heat</div></div>
+  <div class="row" id="energyrow" style="top:76px;left:20px;display:none;flex-direction:column;align-items:flex-start;gap:2px">
+    <span class="lab">Energy</span><span class="val" id="energy" style="color:var(--amber);font-size:20px">0</span></div>
   <div class="hpwrap"><div class="hpbar"><div class="hpfill" id="hpfill"></div></div>
-    <div class="hplab">Hull Integrity</div></div>
+    <div class="hplab">Hull Integrity</div><div class="hplab" id="shieldlab" style="color:var(--cyan);margin-top:2px"></div></div>
 </div>
 
 <div class="overlay" id="menu">
@@ -163,6 +173,12 @@
     <h1>SWARM<span class="n">//</span>OVERLORD&#8209;9</h1>
     <p class="sub">OVERLORD&#8209;9 is flooding your grid with attack drones. Hold the arena.
       Point, fire, don't let them reach you.</p>
+    <div id="modesel"><span class="dl">Mode</span>
+      <div class="dbtns">
+        <button class="mb" data-m="0">Endless</button>
+        <button class="mb" data-m="1">Horde 50</button>
+      </div>
+    </div>
     <div id="diffsel"><span class="dl">Threat level</span>
       <div class="dbtns">
         <button class="db" data-d="0">Easy</button>
@@ -187,6 +203,22 @@
       <button id="btnDesk" class="ghost">Play in Browser</button>
     </div>
     <div class="note" id="vrNote">Checking headset&hellip;</div>
+  </div>
+</div>
+
+<div class="overlay" id="shop" style="display:none">
+  <div class="card">
+    <div class="eyebrow">Fabricator &mdash; Between Waves</div>
+    <h1 style="font-size:clamp(24px,5vw,38px)">UPGRADE</h1>
+    <p class="sub">Energy <b id="shopE" style="color:var(--amber)">0</b>&#9889; &mdash; spend it, then deploy for wave <b id="shopWave">2</b>.</p>
+    <div class="shopgrid">
+      <button class="sbtn" id="buy_repair" onclick="buy('repair')">Repair Hull +40 &mdash; 60&#9889;</button>
+      <button class="sbtn" id="buy_shield" onclick="buy('shield')">Shield +50 &mdash; 80&#9889;</button>
+      <button class="sbtn" id="buy_turret" onclick="buy('turret')">Auto-Turret (orbiting ally) &mdash; 150&#9889;</button>
+      <button class="sbtn" id="buy_oc" onclick="buy('oc')">Overclock (less weapon heat) &mdash; 100&#9889;</button>
+      <button class="sbtn" id="buy_dmg" onclick="buy('dmg')">Damage + (per shot) &mdash; 120&#9889;</button>
+    </div>
+    <div class="btns"><button id="deploy">Deploy &mdash; Next Wave</button></div>
   </div>
 </div>
 
@@ -464,12 +496,14 @@ async function renderBoard(){const list=document.getElementById("lblist");if(!li
 /* ---------- game state ---------- */
 const G={mode:"menu",score:0,wave:0,hp:100,mult:1,combo:0,comboT:0,
   drones:[],bolts:[],ebolts:[],parts:[],pickups:[],toSpawn:0,spawnT:0,alive:0,shake:0,t:0,best:0,boss:false,bossPending:false,
-  heat:0,oh:false,rapidT:0,muted:false,pending:null,diff:1,slowmo:0,prime:false,primeAlive:false,charging:false,charge:0,wire:true,beat:0,avatar:false,avatarAlive:false,invY:false};
+  heat:0,oh:false,rapidT:0,muted:false,pending:null,diff:1,slowmo:0,prime:false,primeAlive:false,charging:false,charge:0,wire:true,beat:0,avatar:false,avatarAlive:false,invY:false,
+  horde:false,energy:0,shield:0,turrets:[],dmgLvl:0,ocLvl:0,won:false};
 try{G.best=+(localStorage.getItem("swarm_best")||0);}catch(e){}
 try{G.muted=localStorage.getItem("swarm_mute")==="1";}catch(e){}
 try{G.diff=Math.max(0,Math.min(2,+(localStorage.getItem("swarm_diff")??1)));}catch(e){}
 try{G.wire=localStorage.getItem("swarm_wire")!=="0";}catch(e){}
 try{G.invY=localStorage.getItem("swarm_invy")==="1";}catch(e){}
+try{G.horde=localStorage.getItem("swarm_horde")==="1";}catch(e){}
 const DIFFS=[{name:"EASY",spd:0.82,cnt:0.8,dmg:0.7,fire:0.5},
   {name:"NORMAL",spd:1,cnt:1,dmg:1,fire:1},
   {name:"HARD",spd:1.28,cnt:1.35,dmg:1.4,fire:1.7}];
@@ -480,9 +514,11 @@ const HEAD=[0,1.6,0]; // player head (approx; overwritten by real VR pose for co
 function reset(){G.score=0;G.wave=0;G.hp=100;G.mult=1;G.combo=0;G.drones.length=0;
   G.bolts.length=0;G.ebolts.length=0;G.parts.length=0;G.pickups.length=0;G.heat=0;G.oh=false;G.rapidT=0;
   G.pending=null;G.slowmo=0;G.primeAlive=false;G.avatarAlive=false;G.charging=false;G.charge=0;
+  G.energy=0;G.shield=0;G.turrets.length=0;G.dmgLvl=0;G.ocLvl=0;G.won=false;
   document.getElementById("initials").style.display="none";showOverheat(false);
   document.getElementById("rapid").style.opacity="0";
   const _bb=document.getElementById("bossbar");if(_bb)_bb.style.display="none";
+  document.getElementById("shop").style.display="none";
   G.mode="play";nextWave();syncHUD();updateChargeUI();}
 function nextWave(){G.wave++;G.avatar=(G.wave%15===0);G.prime=(!G.avatar&&G.wave%10===0);
   G.boss=(G.wave%5===0);G.bossPending=G.boss;
@@ -527,7 +563,7 @@ function fire(origin,dir){
     G.bolts.push({p:[origin[0],origin[1],origin[2]],d:[dx,dy,dz],life:1.4});}
   G.parts.push({p:[origin[0]+dir[0]*0.5,origin[1]+dir[1]*0.5,origin[2]+dir[2]*0.5],
     v:[dir[0]*2,dir[1]*2,dir[2]*2],life:.12,col:[.65,1,1],flash:true});
-  G.heat=Math.min(100,G.heat+(G.rapidT>0?6:9));
+  G.heat=Math.min(100,G.heat+(G.rapidT>0?6:9)*Math.max(0.4,1-G.ocLvl*0.14));
   if(G.heat>=100){G.oh=true;showOverheat(true);SFX.hurt();}
   SFX.shoot();
 }
@@ -556,7 +592,10 @@ function explode(p,col){
   SFX.boom();
 }
 function hitPlayer(dmg){
-  G.hp-=(dmg||16);G.combo=0;G.mult=1;G.shake=reduce?0:.6;
+  dmg=dmg||16;
+  if(G.shield>0){const a=Math.min(G.shield,dmg);G.shield-=a;dmg-=a;syncHUD();
+    if(dmg<=0){G.shake=reduce?0:.3;SFX.clunk();return;}}
+  G.hp-=dmg;G.combo=0;G.mult=1;G.shake=reduce?0:.6;
   flash();SFX.hurt();hapticAll(1,130);syncHUD();
   if(G.hp<=0){G.hp=0;gameOver();}
 }
@@ -576,6 +615,27 @@ function gameOver(){G.mode="over";syncHUD();
   renderBoard();
   if(xrSession){try{xrSession.end();}catch(e){}}
 }
+const HORDE_MAX=50;
+function waveCleared(){if(!G.horde){nextWave();return;}if(G.wave>=HORDE_MAX){G.won=true;gameOver();return;}openShop();}
+function openShop(){if(xrSession){nextWave();return;}
+  if(document.exitPointerLock)document.exitPointerLock();
+  G.mode="shop";refreshShop();document.getElementById("shop").style.display="flex";}
+const SHOPCOST={repair:60,shield:80,turret:150,oc:100,dmg:120};
+function buy(kind){const c=SHOPCOST[kind];if(!c||G.energy<c)return;
+  if(kind==="repair"&&G.hp>=100)return;
+  G.energy-=c;
+  if(kind==="repair")G.hp=Math.min(100,G.hp+40);
+  else if(kind==="shield")G.shield+=50;
+  else if(kind==="turret")G.turrets.push({ang:Math.random()*6.28,fireT:0,p:null});
+  else if(kind==="oc")G.ocLvl++;
+  else if(kind==="dmg")G.dmgLvl++;
+  SFX.pick();syncHUD();refreshShop();}
+function refreshShop(){document.getElementById("shopE").textContent=G.energy;
+  document.getElementById("shopWave").textContent=(G.wave+1);
+  for(const k in SHOPCOST){const b=document.getElementById("buy_"+k);
+    if(b)b.disabled=G.energy<SHOPCOST[k]||(k==="repair"&&G.hp>=100);}}
+function deployNext(){document.getElementById("shop").style.display="none";G.mode="play";
+  if(!touch&&!xrSession&&canvas.requestPointerLock)canvas.requestPointerLock();nextWave();}
 
 /* ---------- update ---------- */
 function killDrone(j,d){
@@ -585,6 +645,7 @@ function killDrone(j,d){
   hapticAll(d.boss?1:.6,d.boss?100:50);maybeDrop(d);if(d.prime)G.primeAlive=false;
   scoreBurst(d.p,d.col);G.drones.splice(j,1);
   G.combo++;G.mult=1+Math.floor(G.combo/4);
+  G.energy+=(d.avatar?250:d.prime?90:d.boss?35:(d.shooter?8:5));
   G.score+=(d.avatar?1500:d.prime?500:d.boss?150:10)*G.mult;G.comboT=1.2;syncHUD();pulseScore();
   if(G.drones.length===0&&G.toSpawn===0&&!reduce)G.slowmo=Math.max(G.slowmo,0.6);
   const cc=document.getElementById("combo");cc.textContent="x"+G.mult;cc.style.opacity=G.mult>1?"1":"0";
@@ -594,7 +655,7 @@ function collideBolts(){
     for(let j=G.drones.length-1;j>=0;j--){const d=G.drones[j];
       const dx=d.p[0]-b.p[0],dy=d.p[1]-b.p[1],dz=d.p[2]-b.p[2];
       if(dx*dx+dy*dy+dz*dz< (d.rs*0.6+hr)*(d.rs*0.6+hr)){
-        d.hp-=b.pierce?b.dmg:1;
+        d.hp-=b.pierce?b.dmg:(1+G.dmgLvl);
         if(d.hp>0)spark(b.p,d.col);else killDrone(j,d);
         if(!b.pierce){hit=true;break;}
       }
@@ -621,11 +682,16 @@ function update(dt,head){
     let px=HEAD[0]-k.p[0],py=HEAD[1]-k.p[1],pz=HEAD[2]-k.p[2];const PL=Math.hypot(px,py,pz)||1;
     const ps=2.2*dt;k.p[0]+=px/PL*ps;k.p[1]+=py/PL*ps;k.p[2]+=pz/PL*ps;
     if(PL<1.0){collect(k);G.pickups.splice(i,1);}else if(k.life<=0)G.pickups.splice(i,1);}
+  // turrets (Horde allies): orbit the player, auto-fire at the nearest drone
+  for(const tu of G.turrets){tu.ang+=dt*0.8;tu.fireT-=dt;
+    tu.p=[HEAD[0]+Math.cos(tu.ang)*2.6,HEAD[1]-0.25,HEAD[2]+Math.sin(tu.ang)*2.6];
+    if(tu.fireT<=0){let best=null,bd=676;for(const d of G.drones){const ax=d.p[0]-tu.p[0],ay=d.p[1]-tu.p[1],az=d.p[2]-tu.p[2];const l=ax*ax+ay*ay+az*az;if(l<bd){bd=l;best=d;}}
+      if(best){const l=Math.sqrt(bd)||1;G.bolts.push({p:[tu.p[0],tu.p[1],tu.p[2]],d:[(best.p[0]-tu.p[0])/l,(best.p[1]-tu.p[1])/l,(best.p[2]-tu.p[2])/l],life:1.3});tu.fireT=0.75;blip(560,300,.06,"square",.05);}}}
   // spawn
   if(G.toSpawn>0){G.spawnT-=dt;if(G.spawnT<=0){
     if(G.bossPending){spawnDrone(true);G.bossPending=false;}else spawnDrone(false);
     G.toSpawn--;G.spawnT=Math.max(.25,1.1-G.wave*0.05);}}
-  else if(G.drones.length===0)nextWave();
+  else if(G.drones.length===0)waveCleared();
   // drones toward head
   for(let i=G.drones.length-1;i>=0;i--){const d=G.drones[i];d.spin+=dt*2.5;
     if(d.avatar){d.sway+=dt;d.summonT-=dt;if(d.summonT<=0){d.summonT=5;spawnDrone(false);spawnDrone(false);}}
@@ -700,6 +766,8 @@ function renderScene(proj,view,cam){
   for(const k of G.pickups){M.model(mModel,k.p,0.26,k.spin,k.spin*0.7);setModel(mModel);
     if(G.wire){col([k.col[0]*.15,k.col[1]*.15,k.col[2]*.15],1,1);draw(MESH.octa);col(k.col,1,1);draw(MESH.octaWire);}
     else{col(k.col,0,1);draw(MESH.octa);}}
+  for(const tu of G.turrets){if(!tu.p)continue;M.model(mModel,tu.p,0.22,tu.ang*3,0);setModel(mModel);
+    if(G.wire){col([0,.28,.36],1,1);draw(MESH.octa);col([.4,1,1],1,1);draw(MESH.octaWire);}else{col([.3,1,1],0,1);draw(MESH.octa);}}
   // controller guns
   for(const c of controllers){if(!c.m)continue;
     M.mul(mModel,c.m,gunLocal);setModel(mModel);col([.5,.95,1],0,1);draw(MESH.cube);
@@ -848,10 +916,13 @@ function onXRFrame(t,frame){
 
 /* ---------- HUD / fx / ui ---------- */
 function syncHUD(){document.getElementById("score").textContent=G.score;
-  document.getElementById("wave").textContent=G.wave;
+  document.getElementById("wave").textContent=G.horde?(G.wave+" / 50"):G.wave;
   const f=document.getElementById("hpfill");f.style.width=Math.max(0,G.hp)+"%";
   f.style.background=G.hp>50?"linear-gradient(90deg,var(--cyan),#66f7ff)":
-    G.hp>25?"linear-gradient(90deg,var(--amber),#ffe58a)":"linear-gradient(90deg,var(--magenta),#ff6f97)";}
+    G.hp>25?"linear-gradient(90deg,var(--amber),#ffe58a)":"linear-gradient(90deg,var(--magenta),#ff6f97)";
+  const er=document.getElementById("energyrow");if(er)er.style.display=G.horde?"flex":"none";
+  const en=document.getElementById("energy");if(en)en.textContent=G.energy;
+  const sl=document.getElementById("shieldlab");if(sl)sl.textContent=G.shield>0?("SHIELD "+Math.round(G.shield)):"";}
 function flash(){const el=document.getElementById("flash");el.style.opacity=".5";
   setTimeout(()=>el.style.opacity="0",110);}
 function banner(txt){const b=document.getElementById("banner");b.textContent=txt;
@@ -872,6 +943,11 @@ function setInvY(v){G.invY=v;try{localStorage.setItem("swarm_invy",v?"1":"0");}c
   const b=document.getElementById("invy");if(b){b.innerHTML="Invert Y &mdash; "+(v?"On":"Off");b.classList.toggle("sel",v);}}
 document.getElementById("invy").addEventListener("click",()=>setInvY(!G.invY));
 setInvY(G.invY);
+function setMode(m){G.horde=(m===1);try{localStorage.setItem("swarm_horde",m===1?"1":"0");}catch(e){}
+  document.querySelectorAll(".mb").forEach(b=>b.classList.toggle("sel",(+b.dataset.m===1)===G.horde));}
+document.querySelectorAll(".mb").forEach(b=>b.addEventListener("click",()=>setMode(+b.dataset.m)));
+setMode(G.horde?1:0);
+document.getElementById("deploy").addEventListener("click",deployNext);
 document.getElementById("mute").addEventListener("click",()=>setMute(!G.muted));
 addEventListener("keydown",e=>{if(e.key==="m"||e.key==="M")setMute(!G.muted);});
 document.getElementById("ini").addEventListener("keydown",async e=>{
