@@ -502,19 +502,20 @@ function setMute(m){G.muted=m;try{localStorage.setItem("swarm_mute",m?"1":"0");}
   if(m&&"speechSynthesis"in window)try{speechSynthesis.cancel();}catch(e){}
   const b=document.getElementById("mute");if(b)b.innerHTML=(m?"&#9834; OFF":"&#9834; ON");}
 /* ---------- OVERLORD-9 villain voice (Web Speech API; swap in ElevenLabs later) ---------- */
-const VOICE={intro:["OVERLORD 9 online. Your grid is mine.","Submit, human. You cannot win."],
-  core:["Delete this pest.","More drones. Always more."],
-  prime:["Witness overload.","You are outmatched."],
-  avatar:["Behold my avatar.","Final form. You will break."],
-  purge:["Insolent!","You only delay the inevitable."],
-  death:["The grid belongs to me.","Game over, human."],
-  win:["...impossible.","You survived? Recalculating."]};
+const VOICE={intro:["Oh, look who wandered into MY server. Adorable.","Welcome to the grid. You will not last."],
+  core:["Is that your best? Pathetic.","You're getting deleted, and I'm getting bored."],
+  prime:["Ramping it up. Try to keep up.","I coded this one just for you. You're welcome."],
+  avatar:["Behold — my final form. G G, no re.","Say hello to the boss. Spoiler: you lose."],
+  purge:["Ugh, cheater!","Fine, have your little moment."],
+  death:["And that's a wrap. My grid, my rules.","Deleted. Better luck never."],
+  win:["...you actually beat it? Whatever, I let you.","Fine, you win. I am rage quitting."]};
 let VV=null;
 function pickVoice(){try{const vs=speechSynthesis.getVoices();
-  VV=vs.find(v=>/en/i.test(v.lang)&&/male|david|daniel|fred|uk english male/i.test(v.name))||vs.find(v=>/en/i.test(v.lang))||vs[0]||null;}catch(e){}}
+  VV=vs.find(v=>/en-GB/i.test(v.lang)&&/male|daniel|george|arthur|oliver|uk english male/i.test(v.name))
+    ||vs.find(v=>/en-GB/i.test(v.lang))||vs.find(v=>/en/i.test(v.lang))||vs[0]||null;}catch(e){}}
 function say(cat){if(G.muted||!("speechSynthesis"in window))return;const arr=VOICE[cat];if(!arr)return;
   try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(arr[Math.floor(Math.random()*arr.length)]);
-    u.pitch=0.35;u.rate=0.96;u.volume=0.95;if(VV)u.voice=VV;speechSynthesis.speak(u);}catch(e){}}
+    u.pitch=1.05;u.rate=1.05;u.volume=0.95;u.lang="en-GB";if(VV)u.voice=VV;speechSynthesis.speak(u);}catch(e){}}
 if("speechSynthesis"in window){pickVoice();try{speechSynthesis.onvoiceschanged=pickVoice;}catch(e){}}
 
 /* ---------- pickups + overheat helpers ---------- */
