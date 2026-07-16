@@ -114,6 +114,8 @@
     color:var(--cyan);box-shadow:inset 0 0 0 1px #1b5563;padding:6px 10px;font-size:12px;display:none}
   #wire{position:fixed;top:14px;right:118px;z-index:9;pointer-events:auto;background:transparent;
     color:var(--violet);box-shadow:inset 0 0 0 1px #3a2a55;padding:6px 10px;font-size:12px;display:none}
+  #fs{position:fixed;bottom:14px;left:16px;z-index:11;pointer-events:auto;background:transparent;
+    color:var(--cyan);box-shadow:inset 0 0 0 1px #1b5563;padding:5px 9px;font-size:15px;line-height:1}
   #rapid{position:fixed;left:50%;top:63%;transform:translateX(-50%);z-index:6;color:var(--cyan);
     font-weight:800;letter-spacing:.3em;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;
     text-shadow:0 0 14px var(--cyan)}
@@ -170,6 +172,7 @@
 <div id="rapid">RAPID FIRE</div>
 <button id="mute" aria-label="Toggle music">&#9834; ON</button>
 <button id="wire" aria-label="Toggle cyber wireframe">&#9638; CYBER</button>
+<button id="fs" aria-label="Toggle fullscreen" title="Fullscreen">&#9974;</button>
 
 <div id="hud" aria-hidden="true">
   <div id="gametitle">SWARM <span>//</span> OVERLORD-9</div>
@@ -1056,6 +1059,11 @@ document.getElementById("mute").addEventListener("click",()=>setMute(!G.muted));
 addEventListener("keydown",e=>{if(e.key==="m"||e.key==="M")setMute(!G.muted);
   if(e.key==="q"||e.key==="Q"||e.key===" ")purge();});
 document.getElementById("ultwrap").addEventListener("click",()=>purge());
+function toggleFS(){try{const d=document,fsEl=d.fullscreenElement||d.webkitFullscreenElement;
+  if(fsEl)(d.exitFullscreen||d.webkitExitFullscreen).call(d);
+  else{const el=d.documentElement;(el.requestFullscreen||el.webkitRequestFullscreen).call(el);}}catch(e){}}
+document.getElementById("fs").addEventListener("click",toggleFS);
+document.addEventListener("fullscreenchange",()=>{const b=document.getElementById("fs");if(b)b.textContent=document.fullscreenElement?"✕":"⛶";});
 document.getElementById("ini").addEventListener("keydown",async e=>{
   if(e.key==="Enter"&&G.pending){const n=document.getElementById("ini").value;
     document.getElementById("initials").style.display="none";
