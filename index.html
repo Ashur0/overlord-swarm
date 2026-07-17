@@ -147,6 +147,7 @@
     font-size:12.5px;letter-spacing:.05em;text-transform:none}
   .sbtn:hover{box-shadow:inset 0 0 0 1px var(--cyan),0 0 18px rgba(0,240,255,.2)}
   .sbtn[disabled]{opacity:.3;cursor:not-allowed;filter:grayscale(.4)}
+  .gpsel{box-shadow:inset 0 0 0 2px var(--cyan),0 0 16px rgba(0,240,255,.5)!important}
   #score{display:inline-block}
   #score.pulse{animation:scPulse .26s ease}
   @keyframes scPulse{0%{transform:scale(1)}45%{transform:scale(1.32);color:#fff}100%{transform:scale(1)}}
@@ -684,7 +685,7 @@ const HORDE_MAX=50;
 function waveCleared(){if(!G.horde){nextWave();return;}if(G.wave>=HORDE_MAX){G.won=true;gameOver();return;}openShop();}
 function openShop(){if(xrSession){nextWave();return;}
   if(document.exitPointerLock)document.exitPointerLock();
-  G.mode="shop";refreshShop();document.getElementById("shop").style.display="flex";}
+  G.mode="shop";shopSel=0;refreshShop();gpShopHighlight();document.getElementById("shop").style.display="flex";}
 const SHOPCOST={repair:60,shield:80,turret:150,oc:100,dmg:120};
 function buy(kind){const c=SHOPCOST[kind];if(!c||G.energy<c)return;
   if(kind==="repair"&&G.hp>=100)return;
@@ -1064,6 +1065,28 @@ function toggleFS(){try{const d=document,fsEl=d.fullscreenElement||d.webkitFulls
   else{const el=d.documentElement;(el.requestFullscreen||el.webkitRequestFullscreen).call(el);}}catch(e){}}
 document.getElementById("fs").addEventListener("click",toggleFS);
 document.addEventListener("fullscreenchange",()=>{const b=document.getElementById("fs");if(b)b.textContent=document.fullscreenElement?"✕":"⛶";});
+/* ---------- gamepad / Xbox controller ---------- */
+const GP={fire:false,pb:false,start:false,up:false,down:false,a:false};
+const SHOPBTNS=["buy_repair","buy_shield","buy_turret","buy_oc","buy_dmg","deploy"];
+let shopSel=0;
+function pad(){const gs=navigator.getGamepads?navigator.getGamepads():[];for(const g of gs)if(g)return g;return null;}
+function gpShopHighlight(){SHOPBTNS.forEach((id,i)=>{const b=document.getElementById(id);if(b)b.classList.toggle("gpsel",i===shopSel);});}
+function gamepadInput(dt){const g=pad();if(!g)return;const B=g.buttons,A=g.axes,press=i=>B[i]&&(B[i].pressed||B[i].value>0.5);
+  if(G.mode==="play"){
+    let rx=Math.abs(A[2]||0)>0.18?A[2]:0,ry=Math.abs(A[3]||0)>0.18?A[3]:0;
+    if(!rx&&!ry){rx=Math.abs(A[0]||0)>0.18?A[0]:0;ry=Math.abs(A[1]||0)>0.18?A[1]:0;}
+    yaw+=rx*2.7*dt;pitch+=(G.invY?1:-1)*ry*2.3*dt;pitch=Math.max(-1.2,Math.min(1.2,pitch));
+    const rt=press(7);if(rt&&!GP.fire)startCharge();if(!rt&&GP.fire){const f=desktopView(mTmp);releaseCharge([HEAD[0],HEAD[1],HEAD[2]],f);}GP.fire=rt;
+    const pb=press(3)||press(4);if(pb&&!GP.pb)purge();GP.pb=pb;
+  }else if(G.mode==="shop"){
+    const up=press(12),dn=press(13),a=press(0);
+    if(up&&!GP.up){shopSel=(shopSel+SHOPBTNS.length-1)%SHOPBTNS.length;gpShopHighlight();}GP.up=up;
+    if(dn&&!GP.down){shopSel=(shopSel+1)%SHOPBTNS.length;gpShopHighlight();}GP.down=dn;
+    if(a&&!GP.a){const b=document.getElementById(SHOPBTNS[shopSel]);if(b&&!b.disabled)b.click();}GP.a=a;
+  }else{const st=press(9)||press(0);if(st&&!GP.start)startDesktop();GP.start=st;}
+}
+function gpLoop(t){const dt=Math.min(.05,(t-(gpLoop.p||t))/1000);gpLoop.p=t;try{gamepadInput(dt);}catch(e){}requestAnimationFrame(gpLoop);}
+requestAnimationFrame(gpLoop);
 document.getElementById("ini").addEventListener("keydown",async e=>{
   if(e.key==="Enter"&&G.pending){const n=document.getElementById("ini").value;
     document.getElementById("initials").style.display="none";
